@@ -1,0 +1,302 @@
+function handleLightingWorkflow(e) {
+  var range = e.range;
+  var lightSheet = range.getSheet();
+  var row = range.getRow();
+  var col = range.getColumn();
+  
+  var statusCol = 10; // Column J
+
+  if (col !== statusCol || row < 2) return;
+  
+  var statusValue = range.getValue() ? range.getValue().toString().trim() : "";
+  if (statusValue === "Sent to Modelling" || statusValue === "Sent to Texturing" || statusValue === "Archived Rework" || statusValue === "Archived Split") return;
+  
+  if (statusValue !== "Uploaded" && statusValue !== "Approved" && statusValue !== "Rework (Modelling)" && statusValue !== "Rework (Texturing)" && statusValue !== "Rework (Lighting)" && statusValue !== "Split" && statusValue !== "Split Done") return;
+  
+  var tokenCol = 16; // Column P (Lock to prevent duplicates)
+  if (lightSheet.getRange(row, tokenCol).getValue() === "PROCESSED") return; 
+
+  var TEXTURING_SHEET_ID = "1LiKAc9vs3vuGl3BP5AGa7i11hQ10IBNWhAcaI7Hox50";
+  var MODELLING_SHEET_ID = "1Bz7S3lcnA3NaqT9MvuhNjY79PBrHEq-FMjJndfBP_2U";
+  var MANAGER_SHEET_ID = "14N_O6oR9qb12w77TJLv0EEOb3_b-siKdzgEPjtaMKmk";
+  var ARTIST_SHEET_ID = "1SaLO_U_9NbXE5KarsG9XSOeCWkKKr1LQhLeZRMoZNIQ";
+
+  // Helper Function: Safe Tab Grabber
+  var getManagerTab = function(managerId, activeTabName) {
+    var ss = SpreadsheetApp.openById(managerId);
+    var sheet = ss.getSheetByName(activeTabName);
+    if (!sheet) { sheet = ss.getSheets()[0]; }
+    return sheet;
+  };
+
+  // --- MANAGER SYNC FUNCTION ---
+  var syncToManagerSheet = function(targetTcn, qaArtist, mainStatus, uploadDate, approvedDate, modStatus, textStatus, incrementField) {
+    if (!targetTcn) return;
+    try {
+      var cleanTarget = targetTcn.toString().split('.')[0].trim();
+      if (cleanTarget === "") return;
+
+      var mgrSheet = getManagerTab(MANAGER_SHEET_ID, lightSheet.getName());
+      var mgrData = mgrSheet.getDataRange().getValues();
+      
+      for (var i = 0; i < mgrData.length; i++) {
+        for (var c = 0; c <= 3; c++) { 
+          if (!mgrData[i][c]) continue;
+          var checkStr = mgrData[i][c].toString().split('.')[0].trim();
+          
+          if (checkStr !== "" && checkStr === cleanTarget) {
+            var mgrRow = i + 1;
+            
+            if (qaArtist !== null) mgrSheet.getRange(mgrRow, 12).setValue(qaArtist); // QA Artist (Col L)
+            if (mainStatus !== null) mgrSheet.getRange(mgrRow, 14).setValue(mainStatus); // Main Status (Col N)
+            if (uploadDate !== null) mgrSheet.getRange(mgrRow, 13).setValue(uploadDate); // Upload Date (Col M)
+            if (approvedDate !== null) mgrSheet.getRange(mgrRow, 15).setValue(approvedDate); // Approved Date (Col O)
+            if (modStatus !== null) mgrSheet.getRange(mgrRow, 9).setValue(modStatus); // Mod Status (Col I)
+            if (textStatus !== null) mgrSheet.getRange(mgrRow, 11).setValue(textStatus); // Text Status (Col K)
+            
+            var targetCol = 0;
+            if (incrementField === "mod") targetCol = 16;       // Mod Reworks (Col P)
+            else if (incrementField === "text") targetCol = 17; // Text Reworks (Col Q)
+            else if (incrementField === "light") targetCol = 18;// Lighting Reworks (Col R)
+            
+            if (targetCol > 0) {
+              var counterCell = mgrSheet.getRange(mgrRow, targetCol);
+              var currentCount = counterCell.getValue();
+              var cleanCount = (typeof currentCount === 'number' && !isNaN(currentCount)) ? currentCount : 0;
+              counterCell.setValue(cleanCount + 1);
+            }
+            
+            return true;
+          }
+        }
+      }
+    } catch (err) { console.log("Manager Sync Error from Lighting: " + err.message); }
+    return false;
+  };
+
+  // --- ARTIST SHEET SYNC FUNCTION ---
+  var syncToArtistSheet = function(artistName, type, complexity, allotTime, timeSpent, reworkTime) {
+    if (!artistName || artistName.toString().trim() === "") return;
+    try {
+      var artistSs = SpreadsheetApp.openById(ARTIST_SHEET_ID);
+      var artistSheet = artistSs.getSheetByName("Lighting");
+      if (!artistSheet) {
+        artistSheet = artistSs.getSheets()[0];
+      }
+      
+      var data = artistSheet.getDataRange().getValues();
+      var artistRow = -1;
+      var cleanSearchName = artistName.toString().trim().toLowerCase();
+      
+      for (var i = 1; i < data.length; i++) {
+        if (data[i][0] && data[i][0].toString().trim().toLowerCase() === cleanSearchName) {
+          artistRow = i + 1;
+          break;
+        }
+      }
+      
+      if (artistRow === -1) {
+        console.log("Artist '" + artistName + "' not found in Artist Sheet.");
+        return;
+      }
+      
+      var complexityCols = {
+        "very simple": 3,
+        "simple": 4,
+        "medium": 5,
+        "hard": 6,
+        "very hard": 7
+      };
+      
+      var valAllot = Number(allotTime) || 0;
+      var valSpent = Number(timeSpent) || 0;
+      var valRework = Number(reworkTime) || 0;
+      
+      if (type.toString().trim().toLowerCase() === "new") {
+        var cellModels = artistSheet.getRange(artistRow, 2);
+        cellModels.setValue((Number(cellModels.getValue()) || 0) + 1);
+        
+        var cleanComp = complexity.toString().trim().toLowerCase();
+        if (complexityCols[cleanComp]) {
+          var cellComp = artistSheet.getRange(artistRow, complexityCols[cleanComp]);
+          cellComp.setValue((Number(cellComp.getValue()) || 0) + 1);
+        }
+      }
+      
+      var cellHours = artistSheet.getRange(artistRow, 10);
+      cellHours.setValue((Number(cellHours.getValue()) || 0) + valAllot);
+      
+      var cellTimeSpent = artistSheet.getRange(artistRow, 11);
+      cellTimeSpent.setValue((Number(cellTimeSpent.getValue()) || 0) + valSpent + valRework);
+      
+      var cellReworkTime = artistSheet.getRange(artistRow, 12);
+      cellReworkTime.setValue((Number(cellReworkTime.getValue()) || 0) + valRework);
+      
+    } catch (err) {
+      console.log("Artist Sheet Sync Error from Lighting: " + err.message);
+    }
+  };
+
+  // --- RUN WORKFLOW EXECUTIONS ---
+  try {
+    lightSheet.getRange(row, tokenCol).setValue("PROCESSED");
+    SpreadsheetApp.flush(); 
+
+    // SWAPPED: TCN is now source 2, Type is now source 4
+    var MAP = {
+      "No": {src: 1, dest: 1}, 
+      "TCN": {src: 2, dest: 2}, 
+      "Comments": {src: 3, dest: 3},
+      "Type": {src: 4, dest: 4}, 
+      "Priority": {src: 5, dest: 5}, 
+      "Complexity": {src: 6, dest: 6}, 
+      "Allot": {src: 7, dest: 7}
+    };
+
+    var currentTcn = lightSheet.getRange(row, 2).getValue(); // Col B (2) is TCN
+    var currentArtist = lightSheet.getRange(row, 9).getValue(); 
+
+    var rowType = lightSheet.getRange(row, 4).getValue();       // Col D (4) is Type
+    var rowComplexity = lightSheet.getRange(row, 6).getValue(); 
+    var rowAllotTime = lightSheet.getRange(row, 11).getValue(); 
+    var rowTimeSpent = lightSheet.getRange(row, 12).getValue(); 
+    var rowReworkTime = lightSheet.getRange(row, 13).getValue(); 
+
+    if (statusValue === "Uploaded") {
+      syncToArtistSheet(currentArtist, rowType, rowComplexity, rowAllotTime, rowTimeSpent, rowReworkTime);
+      var formattedDate = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
+      syncToManagerSheet(currentTcn, currentArtist, "Uploaded", formattedDate, null, null, null, null);
+      lightSheet.getRange(row, tokenCol).setValue("");
+      return; 
+    } 
+    else if (statusValue === "Approved") {
+      syncToArtistSheet(currentArtist, rowType, rowComplexity, rowAllotTime, rowTimeSpent, rowReworkTime);
+      var formattedDate = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
+      syncToManagerSheet(currentTcn, currentArtist, "Approved", null, formattedDate, null, null, null);
+      lightSheet.getRange(row, tokenCol).setValue("");
+      return;
+    }
+    else if (statusValue === "Split") {
+      var lastRowInLight = lightSheet.getLastRow();
+      var splitRow = [];
+      
+      for (var key in MAP) { splitRow[MAP[key].dest - 1] = lightSheet.getRange(row, MAP[key].src).getValue(); }
+      
+      splitRow[3] = "new"; // Type is index 3
+      splitRow[1] = (splitRow[1] ? splitRow[1].toString() : "") + "-"; // TCN is index 1
+      
+      lightSheet.getRange(lastRowInLight + 1, 1, 1, splitRow.length).setValues([splitRow]);
+      lightSheet.getRange(lastRowInLight + 1, statusCol).setValue(""); 
+      lightSheet.getRange(row, statusCol).setValue("Archived Split");
+    }
+    else if (statusValue === "Split Done") {
+      syncToArtistSheet(currentArtist, rowType, rowComplexity, rowAllotTime, rowTimeSpent, rowReworkTime);
+    }
+    else {
+      var ui = SpreadsheetApp.getUi();
+      var response = ui.prompt('Rework Reason', 'Please enter the details for this rework request:', ui.ButtonSet.OK_CANCEL);
+      
+      if (response.getSelectedButton() !== ui.Button.OK) {
+        lightSheet.getRange(row, statusCol).setValue("");
+        lightSheet.getRange(row, tokenCol).setValue("");
+        return;
+      }
+      var comment = response.getResponseText();
+
+      // --- REWORK (MODELLING) ---
+      if (statusValue === "Rework (Modelling)") {
+        syncToArtistSheet(currentArtist, rowType, rowComplexity, rowAllotTime, rowTimeSpent, rowReworkTime);
+
+        var modSheet = SpreadsheetApp.openById(MODELLING_SHEET_ID).getSheetByName(lightSheet.getName());
+        if (!modSheet) throw new Error("Tab name mismatch in Modeling Sheet!");
+        
+        var modData = modSheet.getDataRange().getValues();
+        var foundInMod = false;
+        
+        for (var i = modData.length - 1; i >= 1; i--) {
+          if (modData[i][1] == currentTcn) { // Col B is TCN (index 1)
+            var modRow = i + 1;
+            var duplicatedRowValues = [];
+            for (var key in MAP) {
+              duplicatedRowValues[MAP[key].dest - 1] = modSheet.getRange(modRow, MAP[key].src).getValue();
+            }
+            duplicatedRowValues[3] = "rework"; // Type is index 3
+            duplicatedRowValues[2] = comment;  // Comments is index 2
+            
+            var lastRowInMod = modSheet.getLastRow();
+            modSheet.getRange(lastRowInMod + 1, 1, 1, duplicatedRowValues.length).setValues([duplicatedRowValues]);
+            modSheet.getRange(lastRowInMod + 1, statusCol).setValue(""); 
+            modSheet.getRange(modRow, statusCol).setValue("Archived Rework");
+            foundInMod = true;
+            break; 
+          }
+        }
+        if (!foundInMod) throw new Error("No active row found for TCN " + currentTcn + " in Modeling!");
+        
+        lightSheet.getRange(row, statusCol).setValue("Sent to Modelling");
+        syncToManagerSheet(currentTcn, null, "", "", null, "Rework", "", "mod"); 
+      } 
+      // --- REWORK (TEXTURING) ---
+      else if (statusValue === "Rework (Texturing)") {
+        syncToArtistSheet(currentArtist, rowType, rowComplexity, rowAllotTime, rowTimeSpent, rowReworkTime);
+
+        var texSheet = SpreadsheetApp.openById(TEXTURING_SHEET_ID).getSheetByName(lightSheet.getName());
+        if (!texSheet) throw new Error("Tab name mismatch in Texturing Sheet!");
+        
+        var texData = texSheet.getDataRange().getValues();
+        var foundInTex = false;
+        
+        for (var i = texData.length - 1; i >= 1; i--) {
+          if (texData[i][1] == currentTcn) { // Col B is TCN (index 1)
+            var texRow = i + 1;
+            var duplicatedRowValues = [];
+            for (var key in MAP) {
+              duplicatedRowValues[MAP[key].dest - 1] = texSheet.getRange(texRow, MAP[key].src).getValue();
+            }
+            duplicatedRowValues[3] = "rework"; // Type is index 3
+            duplicatedRowValues[2] = comment;
+            
+            var lastRowInTex = texSheet.getLastRow();
+            texSheet.getRange(lastRowInTex + 1, 1, 1, duplicatedRowValues.length).setValues([duplicatedRowValues]);
+            texSheet.getRange(lastRowInTex + 1, statusCol).setValue("");
+            texSheet.getRange(texRow, statusCol).setValue("Archived Rework");
+            foundInTex = true;
+            break;
+          }
+        }
+        if (!foundInTex) throw new Error("No active row found for TCN " + currentTcn + " in Texturing!");
+        
+        lightSheet.getRange(row, statusCol).setValue("Sent to Texturing");
+        syncToManagerSheet(currentTcn, null, "", "", null, null, "Rework", "text"); 
+      } 
+      // --- REWORK (LIGHTING) ---
+      else if (statusValue === "Rework (Lighting)") {
+        syncToArtistSheet(currentArtist, rowType, rowComplexity, rowAllotTime, rowTimeSpent, rowReworkTime);
+
+        var lastRowInLight = lightSheet.getLastRow();
+        var lightRowValues = [];
+        
+        for (var key in MAP) {
+          lightRowValues[MAP[key].dest - 1] = lightSheet.getRange(row, MAP[key].src).getValue();
+        }
+        lightRowValues[3] = "rework"; // Type is index 3
+        lightRowValues[2] = comment;  
+        
+        lightSheet.getRange(lastRowInLight + 1, 1, 1, lightRowValues.length).setValues([lightRowValues]);
+        lightSheet.getRange(lastRowInLight + 1, statusCol).setValue(""); 
+        
+        if (currentArtist) {
+          lightSheet.getRange(lastRowInLight + 1, 9).setValue(currentArtist); 
+        }
+        
+        lightSheet.getRange(row, statusCol).setValue("Archived Rework");
+        syncToManagerSheet(currentTcn, null, "Rework", "", null, null, null, "light"); 
+      }
+    }
+    
+    lightSheet.getRange(row, tokenCol).setValue("");
+    
+  } catch (err) {
+    lightSheet.getRange(row, tokenCol).setValue("ERROR: " + err.message);
+  }
+}

@@ -1,0 +1,289 @@
+/**
+ * Automatically creates a custom menu bar option on the right side of Help
+ * whenever the spreadsheet is opened.
+ */
+function onOpen() {
+  var ui = SpreadsheetApp.getUi();
+  ui.createMenu('Pipeline Tools')
+      .addItem('Clean 0 Time Rows', 'deleteZeroTimeRows')
+      .addToUi();
+}
+
+/**
+ * The core logic function that sweeps the active tab and drops 0-time entries
+ */
+function deleteZeroTimeRows() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getActiveSheet();
+  var maxRows = sheet.getLastRow();
+  
+  // REALIGNED: Time Taken shifted from Column K to Column L (12th column)
+  var timeTakenCol = 12; 
+  
+  var ui = SpreadsheetApp.getUi();
+  var response = ui.alert('Confirm Cleanup', 'Are you sure you want to wipe out all rows where Time Taken is 0?', ui.ButtonSet.YES_NO);
+  
+  if (response !== ui.Button.YES) return; 
+  
+  var count = 0;
+  for (var row = maxRows; row >= 2; row--) {
+    var cellValue = sheet.getRange(row, timeTakenCol).getValue();
+    if (cellValue === 0 && cellValue !== "") {
+      sheet.deleteRow(row);
+      count++;
+    }
+  }
+  ui.alert('Cleanup Complete', count + ' row(s) with 0 Time Taken were deleted.', ui.ButtonSet.OK);
+}
+
+function handleModellingWorkflow(e) {
+  var range = e.range;
+  var modSheet = range.getSheet();
+  var row = range.getRow();
+  var col = range.getColumn();
+  
+  // REALIGNED: Status shifted to J (10), Artist shifted to I (9)
+  var artistCol = 9;  // Column I (Mod Artist)
+  var statusCol = 10; // Column J (Status)
+
+  if ((col !== statusCol && col !== artistCol) || row < 2) return;
+  
+  var TEXTURING_SHEET_ID = "1LiKAc9vs3vuGl3BP5AGa7i11hQ10IBNWhAcaI7Hox50";
+  var MANAGER_SHEET_ID = "14N_O6oR9qb12w77TJLv0EEOb3_b-siKdzgEPjtaMKmk"; 
+  var ARTIST_SHEET_ID = "1SaLO_U_9NbXE5KarsG9XSOeCWkKKr1LQhLeZRMoZNIQ";
+
+  var getManagerTab = function(managerId, activeTabName) {
+    var ss = SpreadsheetApp.openById(managerId);
+    var sheet = ss.getSheetByName(activeTabName);
+    if (!sheet) {
+      sheet = ss.getSheets()[0]; 
+    }
+    return sheet;
+  };
+
+  // --- COMPREHENSIVE MANAGER SYNC FUNCTION WITH COUNTER ---
+  var syncToManagerSheet = function(targetTcn, artistName, statusName) {
+    if (!targetTcn) return;
+    try {
+      var cleanTarget = targetTcn.toString().split('.')[0].trim();
+      if (cleanTarget === "") return;
+
+      var mgrSheet = getManagerTab(MANAGER_SHEET_ID, modSheet.getName());
+      var mgrData = mgrSheet.getDataRange().getValues();
+      
+      for (var i = 0; i < mgrData.length; i++) {
+        // Scan across columns A, B, C, and D (indices 0 to 3)
+        for (var c = 0; c <= 3; c++) {
+          if (!mgrData[i][c]) continue;
+          var checkStr = mgrData[i][c].toString().split('.')[0].trim();
+          
+          if (checkStr !== "" && checkStr === cleanTarget) {
+            var mgrRow = i + 1;
+            
+            // SHIFTED: Sync Artist Name to Manager (Column H is Column 8)
+            if (artistName !== null) {
+              mgrSheet.getRange(mgrRow, 8).setValue(artistName); 
+            }
+            
+            // SHIFTED: Sync Status to Manager (Column I is Column 9)
+            if (statusName !== null) {
+              mgrSheet.getRange(mgrRow, 9).setValue(statusName); 
+              
+              // SHIFTED: If status is flipped to Rework, bump Mod Reworks (Column P / Column 16) by 1
+              if (statusName === "Rework") {
+                var currentCountCell = mgrSheet.getRange(mgrRow, 16);
+                var currentCount = currentCountCell.getValue();
+                var cleanCount = (typeof currentCount === 'number' && !isNaN(currentCount)) ? currentCount : 0;
+                currentCountCell.setValue(cleanCount + 1);
+              }
+            }
+            return true; 
+          }
+        }
+      }
+    } catch (err) {
+      console.log("Manager Sync Error: " + err.message);
+    }
+    return false;
+  };
+
+  // --- NEW ARTIST SHEET SYNC FUNCTION ---
+  var syncToArtistSheet = function(artistName, type, complexity, allotTime, timeSpent, reworkTime) {
+    if (!artistName || artistName.toString().trim() === "") return;
+    try {
+      var artistSs = SpreadsheetApp.openById(ARTIST_SHEET_ID);
+      var artistSheet = artistSs.getSheetByName("Modelling");
+      if (!artistSheet) {
+        artistSheet = artistSs.getSheets()[0];
+      }
+      
+      var data = artistSheet.getDataRange().getValues();
+      var artistRow = -1;
+      var cleanSearchName = artistName.toString().trim().toLowerCase();
+      
+      for (var i = 1; i < data.length; i++) {
+        if (data[i][0] && data[i][0].toString().trim().toLowerCase() === cleanSearchName) {
+          artistRow = i + 1;
+          break;
+        }
+      }
+      
+      if (artistRow === -1) {
+        console.log("Artist '" + artistName + "' not found in Artist Sheet.");
+        return;
+      }
+      
+      var complexityCols = {
+        "very simple": 3,
+        "simple": 4,
+        "medium": 5,
+        "hard": 6,
+        "very hard": 7
+      };
+      
+      var valAllot = Number(allotTime) || 0;
+      var valSpent = Number(timeSpent) || 0;
+      var valRework = Number(reworkTime) || 0;
+      
+      // 1. Check if Type is new to update tracking models counts
+      if (type.toString().trim().toLowerCase() === "new") {
+        var cellModels = artistSheet.getRange(artistRow, 2);
+        cellModels.setValue((Number(cellModels.getValue()) || 0) + 1);
+        
+        var cleanComp = complexity.toString().trim().toLowerCase();
+        if (complexityCols[cleanComp]) {
+          var cellComp = artistSheet.getRange(artistRow, complexityCols[cleanComp]);
+          cellComp.setValue((Number(cellComp.getValue()) || 0) + 1);
+        }
+      }
+      
+      // 2. Add cumulative performance times to Column J, K, and L targets
+      var cellHours = artistSheet.getRange(artistRow, 10);
+      cellHours.setValue((Number(cellHours.getValue()) || 0) + valAllot);
+      
+      var cellTimeSpent = artistSheet.getRange(artistRow, 11);
+      cellTimeSpent.setValue((Number(cellTimeSpent.getValue()) || 0) + valSpent + valRework);
+      
+      var cellReworkTime = artistSheet.getRange(artistRow, 12);
+      cellReworkTime.setValue((Number(cellReworkTime.getValue()) || 0) + valRework);
+      
+    } catch (err) {
+      console.log("Artist Sheet Sync Error: " + err.message);
+    }
+  };
+
+  // --- CASE A: MOD ARTIST CHANGE ONLY ---
+  if (col === artistCol) {
+    var newArtist = range.getValue();
+    var tcn = modSheet.getRange(row, 2).getValue(); // SWAPPED: Column B (2) is now TCN
+    syncToManagerSheet(tcn, newArtist, null);
+    return; 
+  }
+
+  // --- CASE B: STATUS CHANGE (Done / Rework / Split / Split Done) ---
+  var statusValue = range.getValue();
+  if (statusValue === "Archived Rework" || statusValue === "Archived Split" || statusValue === "Sent to Texturing") return;
+  
+  // UPDATED: Allow "Split" and "Split Done" to trigger the workflow
+  if (statusValue !== "Done" && statusValue !== "Rework" && statusValue !== "Split" && statusValue !== "Split Done") return;
+  
+  // REALIGNED: Token lock shifted to Column P (16th column)
+  var tokenCol = 16; 
+  if (modSheet.getRange(row, tokenCol).getValue() === "PROCESSED") return; 
+
+  var currentTcn = modSheet.getRange(row, 2).getValue(); // SWAPPED: Pull from Col B (2)
+  var currentArtist = modSheet.getRange(row, 9).getValue(); // Pull from new Col I
+  
+  // UPDATED: Completely blocks "Split" and "Split Done" from updating the Manager Sheet
+  if (statusValue !== "Split Done" && statusValue !== "Split") {
+    syncToManagerSheet(currentTcn, currentArtist, statusValue);
+  }
+
+  // --- INTERNAL PRODUCTION ROUTING LOGIC ---
+  try {
+    modSheet.getRange(row, tokenCol).setValue("PROCESSED");
+    SpreadsheetApp.flush(); 
+
+    // SWAPPED MAP: TCN is now source 2, Type is now source 4
+    var MAP = {
+      "No": {src: 1, dest: 1}, 
+      "TCN": {src: 2, dest: 2}, 
+      "Comments": {src: 3, dest: 3},
+      "Type": {src: 4, dest: 4}, 
+      "Priority": {src: 5, dest: 5}, 
+      "Complexity": {src: 6, dest: 6}, 
+      "Allot": {src: 7, dest: 7}
+    };
+
+    var checkTcnExists = function(destSheet, tcn) {
+      var data = destSheet.getDataRange().getValues();
+      return data.some(function(r) { 
+        if (!r[1] || !tcn) return false; // r[1] is index 1, which corresponds to Col B (TCN)
+        return r[1].toString().split('.')[0].trim() === tcn.toString().split('.')[0].trim(); 
+      });
+    };
+
+    // SWAPPED: Pull configuration variables matching the new layout
+    var rowType = modSheet.getRange(row, 4).getValue();       // SWAPPED: Column D (Type)
+    var rowComplexity = modSheet.getRange(row, 6).getValue(); // Column F (Complexity)
+    var rowAllotTime = modSheet.getRange(row, 11).getValue(); // Column K (Allocated Time)
+    var rowTimeSpent = modSheet.getRange(row, 12).getValue(); // Column L (Time Spent)
+    var rowReworkTime = modSheet.getRange(row, 13).getValue(); // Column M (Rework Time)
+
+    if (statusValue === "Done") {
+      syncToArtistSheet(currentArtist, rowType, rowComplexity, rowAllotTime, rowTimeSpent, rowReworkTime);
+
+      var texSheet = SpreadsheetApp.openById(TEXTURING_SHEET_ID).getSheetByName(modSheet.getName());
+      if (!texSheet) throw new Error("Tab name mismatch!");
+      
+      var newRow = [];
+      for (var key in MAP) { newRow[MAP[key].dest - 1] = modSheet.getRange(row, MAP[key].src).getValue(); }
+      
+      // newRow[3] is Type (index 3), newRow[1] is TCN (index 1)
+      newRow[3] = checkTcnExists(texSheet, newRow[1]) ? "rework" : "new"; 
+      
+      texSheet.appendRow(newRow);
+      modSheet.getRange(row, statusCol).setValue("Sent to Texturing");
+    } 
+    else if (statusValue === "Rework") {
+      syncToArtistSheet(currentArtist, rowType, rowComplexity, rowAllotTime, rowTimeSpent, rowReworkTime);
+
+      var lastRow = modSheet.getLastRow();
+      var reworkRow = [];
+      for (var key in MAP) { reworkRow[MAP[key].dest - 1] = modSheet.getRange(row, MAP[key].src).getValue(); }
+      
+      reworkRow[3] = "rework"; // Type is now index 3
+      
+      modSheet.getRange(lastRow + 1, 1, 1, reworkRow.length).setValues([reworkRow]);
+      modSheet.getRange(lastRow + 1, statusCol).setValue(""); 
+      modSheet.getRange(row, statusCol).setValue("Archived Rework");
+    }
+    // --- NEW LOGIC: SPLIT (Duplicates row like Rework, but sets to "new" and adds "-") ---
+    else if (statusValue === "Split") {
+      // INTENTIONALLY REMOVED syncToArtistSheet() HERE.
+
+      var lastRow = modSheet.getLastRow();
+      var splitRow = [];
+      for (var key in MAP) { splitRow[MAP[key].dest - 1] = modSheet.getRange(row, MAP[key].src).getValue(); }
+      
+      splitRow[3] = "new"; // Type is index 3
+      splitRow[1] = (splitRow[1] ? splitRow[1].toString() : "") + "-"; // TCN is index 1
+      
+      modSheet.getRange(lastRow + 1, 1, 1, splitRow.length).setValues([splitRow]);
+      modSheet.getRange(lastRow + 1, statusCol).setValue(""); 
+      modSheet.getRange(row, statusCol).setValue("Archived Split");
+    }
+    // --- OLD SPLIT LOGIC RENAME: SPLIT DONE ---
+    else if (statusValue === "Split Done") {
+      // Log the performance metrics for the time they did spend before splitting
+      syncToArtistSheet(currentArtist, rowType, rowComplexity, rowAllotTime, rowTimeSpent, rowReworkTime);
+      
+      // Process ends here without updating Manager sheet, pushing to Texturing, or reworking
+    }
+    
+    modSheet.getRange(row, tokenCol).setValue("");
+    
+  } catch (err) {
+    modSheet.getRange(row, tokenCol).setValue("ERROR: " + err.message);
+  }
+}

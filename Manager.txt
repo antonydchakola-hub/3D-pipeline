@@ -1,0 +1,71 @@
+/**
+ * Global Configuration for Manager Sheet Utilities
+ */
+var MOD_SHEET_ID = "1Bz7S3lcnA3NaqT9MvuhNjY79PBrHEq-FMjJndfBP_2U";
+
+/**
+ * Automatically adds the pipeline options to the Top Menu Bar on load
+ */
+function onOpen() {
+  var ui = SpreadsheetApp.getUi();
+  ui.createMenu('Pipeline Control')
+      .addItem('Push SELECTED Rows to Modeling', 'syncSelectedRowsToModeling')
+      .addToUi();
+}
+
+/**
+ * Sweeps the Manager sheet and appends ONLY checked rows to Modeling (Leaving Complexity Empty)
+ */
+function syncSelectedRowsToModeling() {
+  var hubSheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  
+  var modSheet = SpreadsheetApp.openById(MOD_SHEET_ID).getSheetByName(hubSheet.getName());
+  if (!modSheet) {
+    modSheet = SpreadsheetApp.openById(MOD_SHEET_ID).getSheets()[0]; // Fallback to far left tab
+  }
+  
+  var data = hubSheet.getDataRange().getValues();
+  var ui = SpreadsheetApp.getUi();
+  
+  // Column A = 0 (Checkboxes)
+  var checkboxColIndex = 0; 
+  
+  var count = 0;
+  var rowsToUncheck = [];
+
+  // Loop starts on row 7 (index 6) to bypass layout headers
+  for (var i = 6; i < data.length; i++) {
+    var rowData = data[i];
+    var isChecked = rowData[checkboxColIndex];
+    
+    if (isChecked === true) {
+      var no = rowData[1];        // Column B (No.)
+      var tcin = rowData[2];      // Column C (TCINs)
+      var priority = rowData[3];  // Column D (PRIORITY)
+      var allotDate = rowData[4]; // Column E (Allotted Date - reverted to index 4)
+      
+      if (tcin && tcin.toString().trim() !== "") {
+        // Append cleanly to the bottom of the Modeling Sheet layout matching its columns:
+        // [No (A), Type (B), Comments (C), TCN (D), Priority (E), Complexity (F), Allotted Date (G), Due Date (H), Artist (I), Status (J)]
+        // The 6th slot (Complexity) is left completely blank "" for the team to fill later
+        modSheet.appendRow([no,tcin, "", "new", priority, "", allotDate, "", "", ""]);
+        count++;
+        
+        rowsToUncheck.push(i + 1);
+      }
+    }
+  }
+  
+  // Clean up: Automatically clear out checkboxes for processed rows
+  if (rowsToUncheck.length > 0) {
+    rowsToUncheck.forEach(function(rowNum) {
+      hubSheet.getRange(rowNum, checkboxColIndex + 1).setValue(false);
+    });
+  }
+  
+  if (count > 0) {
+    ui.alert('Sync Complete', count + ' selected asset(s) appended to Modeling with an empty Complexity field.', ui.ButtonSet.OK);
+  } else {
+    ui.alert('No Rows Selected', 'Please check at least one box in Column A before running the dispatch tool.', ui.ButtonSet.OK);
+  }
+}
