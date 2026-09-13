@@ -57,19 +57,19 @@ const ProductionView = ({ stageName, activeProject }) => {
             <tr><td colSpan="13" style={{textAlign:'center', padding: '2rem', color: '#718096'}}>No assets in this project.</td></tr>
           ) : (
             projectData.map((row) => {
-              const isArchived = row.status && row.status.startsWith('Archived');
+              const isArchived = row.status && row.status === 'Archived Rework';
               const rowStyle = isArchived ? { opacity: 0.5, backgroundColor: '#f7fafc' } : {};
               
               return (
                 <tr key={row.id} style={rowStyle}>
                   <td style={{ fontWeight: row.no ? 'bold' : 'normal', color: '#4a5568' }}>{row.no}</td>
-                  <td style={{ fontFamily: 'monospace', fontSize: '0.95rem' }}>{row.tcn}</td>
+                  <td><input type="text" value={row.tcn || ''} onChange={(e) => updateRow(stageName, activeProject, row.id, 'tcn', e.target.value)} className="table-input" disabled={isArchived || !row.isSplit} style={{ fontFamily: 'monospace', fontSize: '0.95rem', cursor: (isArchived || !row.isSplit) ? 'not-allowed' : 'text' }} /></td>
                   <td><input type="text" value={row.comments || ''} onChange={(e) => updateRow(stageName, activeProject, row.id, 'comments', e.target.value)} className="table-input" disabled={isArchived} /></td>
                   <td><DropdownCell options={typeOptions} value={row.type} onChange={(v) => updateRow(stageName, activeProject, row.id, 'type', v)} /></td>
                   <td><DropdownCell options={priorityOptions} value={row.priority} onChange={(v) => updateRow(stageName, activeProject, row.id, 'priority', v)} /></td>
                   <td><DropdownCell options={complexityOptions} value={row.complexity} onChange={(v) => updateRow(stageName, activeProject, row.id, 'complexity', v)} /></td>
-                  <td><input type="text" value={row.allotDate || ''} onChange={(e) => updateRow(stageName, activeProject, row.id, 'allotDate', e.target.value)} className="table-input date-input" disabled={isArchived} /></td>
-                  <td><input type="text" value={row.dueDate || ''} onChange={(e) => updateRow(stageName, activeProject, row.id, 'dueDate', e.target.value)} className="table-input date-input" disabled={isArchived} /></td>
+                  <td><input type="date" value={row.allotDate || ''} onChange={(e) => updateRow(stageName, activeProject, row.id, 'allotDate', e.target.value)} className="table-input date-input" disabled={isArchived} /></td>
+                  <td><input type="date" value={row.dueDate || ''} onChange={(e) => updateRow(stageName, activeProject, row.id, 'dueDate', e.target.value)} className="table-input date-input" disabled={isArchived} /></td>
                   <td><DropdownCell options={artistOptions} value={row.artist} onChange={(v) => updateRow(stageName, activeProject, row.id, 'artist', v)} /></td>
                   <td>
                     {isArchived ? (

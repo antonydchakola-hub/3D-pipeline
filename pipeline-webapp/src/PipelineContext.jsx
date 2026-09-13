@@ -23,7 +23,6 @@ const initialData = {
     'C6_2026': []
   },
   Texturing: { 'Testing': [], 'C6_2026': [] },
-  Lighting: { 'Testing': [], 'C6_2026': [] }
 };
 
 export const PipelineProvider = ({ children }) => {
@@ -174,7 +173,7 @@ export const PipelineProvider = ({ children }) => {
         incrementManagerRework(project, row.tcn, 'modRework');
       } else if (newStatus === 'Split') {
         setData(prev => {
-          const splitRow = { ...row, id: generateId(), tcn: row.tcn + '-', type: 'new', status: '' };
+          const splitRow = { ...row, id: generateId(), tcn: row.tcn + '-', type: 'new', status: '', isSplit: true };
           const modData = prev.Modelling[project].map(r => r.id === id ? { ...r, status: 'Archived Split' } : r);
           modData.push(splitRow);
           return { ...prev, Modelling: { ...prev.Modelling, [project]: modData } };
@@ -219,7 +218,7 @@ export const PipelineProvider = ({ children }) => {
         incrementManagerRework(project, row.tcn, 'textRework');
       } else if (newStatus === 'Split') {
         setData(prev => {
-          const splitRow = { ...row, id: generateId(), tcn: row.tcn + '-', type: 'new', status: '' };
+          const splitRow = { ...row, id: generateId(), tcn: row.tcn + '-', type: 'new', status: '', isSplit: true };
           const texData = prev.Texturing[project].map(r => r.id === id ? { ...r, status: 'Archived Split' } : r);
           texData.push(splitRow);
           return { ...prev, Texturing: { ...prev.Texturing, [project]: texData } };
@@ -278,7 +277,7 @@ export const PipelineProvider = ({ children }) => {
         updateManagerField(project, row.tcn, 'uploadDate', '');
       } else if (newStatus === 'Split') {
         setData(prev => {
-          const splitRow = { ...row, id: generateId(), tcn: row.tcn + '-', type: 'new', status: '' };
+          const splitRow = { ...row, id: generateId(), tcn: row.tcn + '-', type: 'new', status: '', isSplit: true };
           const lightData = prev.Lighting[project].map(r => r.id === id ? { ...r, status: 'Archived Split' } : r);
           lightData.push(splitRow);
           return { ...prev, Lighting: { ...prev.Lighting, [project]: lightData } };

@@ -84,15 +84,15 @@ const ManagerView = ({ activeProject }) => {
                   <input type="text" value={row.tcin || ''} onChange={(e) => updateRow('Manager', activeProject, row.id, 'tcin', e.target.value)} className="table-input" />
                 </td>
                 <td><DropdownCell options={priorityOptions} value={row.priority} onChange={(v) => updateRow('Manager', activeProject, row.id, 'priority', v)} /></td>
-                <td><input type="text" value={row.allotDate || ''} onChange={(e) => updateRow('Manager', activeProject, row.id, 'allotDate', e.target.value)} className="table-input date-input" /></td>
+                <td><input type="date" value={row.allotDate || ''} onChange={(e) => updateRow('Manager', activeProject, row.id, 'allotDate', e.target.value)} className="table-input date-input" /></td>
                 <td><DropdownCell options={artistOptions} value={row.modArtist} onChange={(v) => updateRow('Manager', activeProject, row.id, 'modArtist', v)} /></td>
                 <td><DropdownCell options={modStatusOptions} value={row.modStatus} onChange={(v) => updateRow('Manager', activeProject, row.id, 'modStatus', v)} /></td>
                 <td><DropdownCell options={artistOptions} value={row.textArtist} onChange={(v) => updateRow('Manager', activeProject, row.id, 'textArtist', v)} /></td>
                 <td><DropdownCell options={textStatusOptions} value={row.textStatus} onChange={(v) => updateRow('Manager', activeProject, row.id, 'textStatus', v)} /></td>
                 <td><DropdownCell options={artistOptions} value={row.qaArtist} onChange={(v) => updateRow('Manager', activeProject, row.id, 'qaArtist', v)} /></td>
-                <td><input type="text" value={row.uploadDate || ''} onChange={(e) => updateRow('Manager', activeProject, row.id, 'uploadDate', e.target.value)} className="table-input date-input" /></td>
+                <td><input type="date" value={row.uploadDate || ''} onChange={(e) => updateRow('Manager', activeProject, row.id, 'uploadDate', e.target.value)} className="table-input date-input" /></td>
                 <td><DropdownCell options={mainStatusOptions} value={row.mainStatus} onChange={(v) => updateRow('Manager', activeProject, row.id, 'mainStatus', v)} /></td>
-                <td><input type="text" value={row.approvedDate || ''} onChange={(e) => updateRow('Manager', activeProject, row.id, 'approvedDate', e.target.value)} className="table-input date-input" /></td>
+                <td><input type="date" value={row.approvedDate || ''} onChange={(e) => updateRow('Manager', activeProject, row.id, 'approvedDate', e.target.value)} className="table-input date-input" /></td>
                 <td style={{ textAlign: 'center' }}>{row.modRework}</td>
                 <td style={{ textAlign: 'center' }}>{row.textRework}</td>
                 <td style={{ textAlign: 'center' }}>{row.lightRework}</td>
