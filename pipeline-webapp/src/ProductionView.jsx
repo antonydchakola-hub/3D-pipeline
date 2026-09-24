@@ -77,10 +77,14 @@ const ProductionView = ({ stageName, project, query, filters, onOpenAsset }) => 
           {rows.map((row) => {
             const locked = isLocked(row);
             const overdue = isOverdue(row, today);
-            const rework = row.type === 'rework' && !locked;
+            const sentBack = row.status === 'Archived Rework' || isSendBack(stageName, row.status);
+            const splitOff = row.status === 'Archived Split';
+            const finished = !sentBack && !splitOff && (locked || row.status === 'Split Done' || row.status === 'Approved');
+            const rework = row.type === 'rework' && !locked && !finished;
             const comment = commentFor(row.tcn);
+            const rowState = finished ? 'is-done' : sentBack ? 'is-sentback' : splitOff ? 'is-split' : '';
             return (
-              <tr key={row.id} className={`${locked ? 'is-archived' : ''}${overdue ? ' is-overdue' : ''}${rework ? ' is-rework' : ''}`}>
+              <tr key={row.id} className={`${rowState}${overdue ? ' is-overdue' : ''}${rework ? ' is-rework' : ''}`}>
                 <td className="sticky" style={frozenStyle(0)}><span className="mono muted">{row.no}</span></td>
                 <td className="sticky edge" style={frozenStyle(1)}>
                   {row.isSplit && !locked ? (

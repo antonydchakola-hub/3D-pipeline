@@ -48,7 +48,8 @@ export const isSendBack = (stage, status) => {
 
 export const isArchived = (row) => ARCHIVED.has(row?.status);
 // Rows that already handed off; re-running a transition on them would duplicate the asset.
-export const isLocked = (row) => isArchived(row) || !!sentTo(row?.status);
+// An archived split stays editable so the original can still be finished (Done / Split Done), as in the sheets.
+export const isLocked = (row) => row?.status === 'Archived Rework' || !!sentTo(row?.status);
 export const isClosed = (row) => isArchived(row) || !!sentTo(row?.status) || row?.status === 'Split Done';
 export const isOpen = (row) => !isClosed(row) && row?.status !== 'Approved';
 

@@ -1,27 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { usePipeline } from './PipelineContext';
 import { Avatar, Icon } from './ui';
+import { ROLE_LABEL, useAuth } from './auth';
 
-// Cloudflare Access serves the signed-in user here once it protects the site; elsewhere this resolves to "not signed in".
-const useIdentity = () => {
-  const [identity, setIdentity] = useState({ status: 'loading' });
-  useEffect(() => {
-    let alive = true;
-    fetch('/cdn-cgi/access/get-identity', { credentials: 'include' })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((json) => {
-        if (!alive) return;
-        setIdentity(json?.email ? { status: 'signed-in', email: json.email, name: json.name || '' } : { status: 'signed-out' });
-      })
-      .catch(() => alive && setIdentity({ status: 'signed-out' }));
-    return () => { alive = false; };
-  }, []);
-  return identity;
-};
-
-const ProfileMenu = ({ onManageTeam }) => {
-  const { data } = usePipeline();
-  const identity = useIdentity();
+const ProfileMenu = ({ onManageTeam, onManageAccounts }) => {
+  const { user, canManage, isAdmin, signOut } = useAuth();
   const [open, setOpen] = useState(false);
   const rootRef = useRef(null);
 
@@ -34,12 +16,7 @@ const ProfileMenu = ({ onManageTeam }) => {
     return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
   }, [open]);
 
-  const signedIn = identity.status === 'signed-in';
-  const member = signedIn
-    ? (data.artists || []).find((a) => a.email && a.email.toLowerCase() === identity.email.toLowerCase())
-    : null;
-  const displayName = member?.name || identity.name || (signedIn ? identity.email.split('@')[0] : '');
-  const role = member ? member.role || 'Artist' : signedIn ? 'Not on the team list yet' : '';
+  if (!user) return null;
 
   return (
     <div className="profile" ref={rootRef}>
@@ -49,42 +26,35 @@ const ProfileMenu = ({ onManageTeam }) => {
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={signedIn ? `Account: ${displayName}` : 'Account'}
+        aria-label={`Account: ${user.displayName}`}
       >
-        {signedIn ? <Avatar name={displayName} size={30} /> : <span className="avatar avatar-guest"><Icon name="user" size={16} /></span>}
+        <Avatar name={user.displayName} size={30} />
         <Icon name="chevronDown" size={13} stroke={2} />
       </button>
 
       {open && (
         <div className="menu" role="menu">
           <div className="menu-head">
-            {signedIn ? (
-              <>
-                <Avatar name={displayName} size={36} />
-                <div className="menu-who">
-                  <span className="menu-name">{displayName}</span>
-                  <span className="menu-email">{identity.email}</span>
-                  <span className={`menu-role${member ? '' : ' is-warn'}`}>{role}{member?.stages?.length ? ` · ${member.stages.join(', ')}` : ''}</span>
-                </div>
-              </>
-            ) : (
-              <>
-                <span className="avatar avatar-guest" style={{ width: 36, height: 36 }}><Icon name="user" size={18} /></span>
-                <div className="menu-who">
-                  <span className="menu-name">{identity.status === 'loading' ? 'Checking sign-in…' : 'Not signed in'}</span>
-                  <span className="menu-email">Sign-in turns on when Cloudflare Access protects this site.</span>
-                </div>
-              </>
-            )}
+            <Avatar name={user.displayName} size={36} />
+            <div className="menu-who">
+              <span className="menu-name">{user.displayName}</span>
+              <span className="menu-email mono">{user.username}</span>
+              <span className="menu-role">{ROLE_LABEL[user.role]}</span>
+            </div>
           </div>
-          <button type="button" role="menuitem" className="menu-item" onClick={() => { setOpen(false); onManageTeam(); }}>
-            <Icon name="user" size={15} />Manage team
-          </button>
-          {signedIn && (
-            <a role="menuitem" className="menu-item" href="/cdn-cgi/access/logout">
-              <Icon name="arrowRight" size={15} />Sign out
-            </a>
+          {canManage && (
+            <button type="button" role="menuitem" className="menu-item" onClick={() => { setOpen(false); onManageTeam(); }}>
+              <Icon name="user" size={15} />Manage team
+            </button>
           )}
+          {isAdmin && (
+            <button type="button" role="menuitem" className="menu-item" onClick={() => { setOpen(false); onManageAccounts(); }}>
+              <Icon name="lock" size={15} />Accounts
+            </button>
+          )}
+          <button type="button" role="menuitem" className="menu-item" onClick={() => { setOpen(false); signOut(); }}>
+            <Icon name="arrowRight" size={15} />Sign out
+          </button>
         </div>
       )}
     </div>

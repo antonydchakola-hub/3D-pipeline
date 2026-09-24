@@ -158,6 +158,7 @@ const AssetRecord = ({ project, tcn, onBack }) => {
                   <div className="event-body">
                     <span className={`event-title${ev.kind === 'rework' ? ' is-rework' : ''}`}>{ev.text}</span>
                     {ev.detail && <span className="event-meta">{ev.detail}</span>}
+                    {ev.by && <span className="event-by">by {ev.by}</span>}
                     {ev.comment && (
                       <blockquote className={`quote${ev.kind === 'comment' ? ' is-comment' : ''}`}>
                         <span className="quote-text">“{ev.comment}”</span>

@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { usePipeline } from './PipelineContext';
+import { useAuth } from './auth';
 import { ArtistCell, Dash, Icon, Pill, PillSelect } from './ui';
 import {
   MAIN_STATUSES, PRIORITIES, REWORK_FIELD, STAGES, STAGE_LABEL, STAGE_TONE,
@@ -26,6 +27,8 @@ const managerRowView = (data, project, row) => {
 
 const ManagerView = ({ project, query, filters, onOpenAsset, highlightId }) => {
   const { data, updateRow, setAssetComment } = usePipeline();
+  // Normal accounts can read the Manager sheet and edit shared comments; the rest is for managers.
+  const readOnly = !useAuth().canManage;
 
   useEffect(() => {
     if (!highlightId) return;
@@ -102,14 +105,14 @@ const ManagerView = ({ project, query, filters, onOpenAsset, highlightId }) => {
                       type="checkbox"
                       className="check"
                       checked={!!row.checked}
-                      disabled={!row.tcin}
-                      title={row.tcin ? 'Select for dispatch' : 'Add a TCIN first'}
+                      disabled={!row.tcin || readOnly}
+                      title={readOnly ? 'Only managers can dispatch' : row.tcin ? 'Select for dispatch' : 'Add a TCIN first'}
                       onChange={(e) => set(row.id, 'checked')(e.target.checked)}
                     />
                   )}
                 </td>
                 <td className="sticky" style={frozenStyle(1)}>
-                  <input className="cell-input mono muted" value={row.no || ''} onChange={(e) => set(row.id, 'no')(e.target.value)} aria-label="Number" />
+                  <input className="cell-input mono muted" value={row.no || ''} onChange={(e) => set(row.id, 'no')(e.target.value)} aria-label="Number" disabled={readOnly} />
                 </td>
                 <td className="sticky" style={frozenStyle(2)}>
                   {dispatched ? (
@@ -117,11 +120,11 @@ const ManagerView = ({ project, query, filters, onOpenAsset, highlightId }) => {
                       {row.tcin}<Icon name="chevronRight" size={13} stroke={2} />
                     </button>
                   ) : (
-                    <input className="cell-input mono strong" value={row.tcin || ''} placeholder="Enter TCIN" onChange={(e) => set(row.id, 'tcin')(e.target.value)} aria-label="TCIN" />
+                    <input className="cell-input mono strong" value={row.tcin || ''} placeholder="Enter TCIN" onChange={(e) => set(row.id, 'tcin')(e.target.value)} aria-label="TCIN" disabled={readOnly} />
                   )}
                 </td>
                 <td className="sticky edge" style={frozenStyle(3)}>
-                  <PillSelect options={PRIORITIES} value={row.priority} onChange={set(row.id, 'priority')} tone={priorityTone(row.priority)} format={priorityShort} placeholder="Priority" label="Priority" />
+                  <PillSelect options={PRIORITIES} value={row.priority} onChange={set(row.id, 'priority')} tone={priorityTone(row.priority)} format={priorityShort} placeholder="Priority" label="Priority" disabled={readOnly} />
                 </td>
                 <td className="col-comment">
                   <input
@@ -154,7 +157,7 @@ const ManagerView = ({ project, query, filters, onOpenAsset, highlightId }) => {
                 })}
 
                 <td className="col-date">
-                  <input type="date" className="cell-input date" value={row.allotDate || ''} onChange={(e) => set(row.id, 'allotDate')(e.target.value)} aria-label="Allotted date" />
+                  <input type="date" className="cell-input date" value={row.allotDate || ''} onChange={(e) => set(row.id, 'allotDate')(e.target.value)} aria-label="Allotted date" disabled={readOnly} />
                 </td>
                 <td className="col-date">
                   {dueRow?.dueDate ? (
@@ -165,6 +168,12 @@ const ManagerView = ({ project, query, filters, onOpenAsset, highlightId }) => {
                   ) : <Dash />}
                 </td>
                 <td className="col-stage">
+                  {readOnly ? (
+                    <span className={`status-pill is-static tone-${position.tone}`} title={row.mainStatus ? `Main status: ${row.mainStatus}` : 'Follows the stage sheets'}>
+                      <span className="pill-dot" />
+                      {position.label}
+                    </span>
+                  ) : (
                   <label className={`status-pill tone-${position.tone}`} title={row.mainStatus ? `Main status: ${row.mainStatus}` : 'Follows the stage sheets — click to set the main status'}>
                     <span className="pill-dot" />
                     {position.label}
@@ -174,12 +183,13 @@ const ManagerView = ({ project, query, filters, onOpenAsset, highlightId }) => {
                       {MAIN_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                     </select>
                   </label>
+                  )}
                 </td>
                 <td className="col-date">
-                  <input type="date" className="cell-input date" value={row.uploadDate || ''} onChange={(e) => set(row.id, 'uploadDate')(e.target.value)} aria-label="Upload date" />
+                  <input type="date" className="cell-input date" value={row.uploadDate || ''} onChange={(e) => set(row.id, 'uploadDate')(e.target.value)} aria-label="Upload date" disabled={readOnly} />
                 </td>
                 <td className="col-date">
-                  <input type="date" className="cell-input date" value={row.approvedDate || ''} onChange={(e) => set(row.id, 'approvedDate')(e.target.value)} aria-label="Approved date" />
+                  <input type="date" className="cell-input date" value={row.approvedDate || ''} onChange={(e) => set(row.id, 'approvedDate')(e.target.value)} aria-label="Approved date" disabled={readOnly} />
                 </td>
               </tr>
             );

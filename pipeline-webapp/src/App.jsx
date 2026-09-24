@@ -8,6 +8,8 @@ import ProfileMenu from './ProfileMenu';
 import ProjectSwitcher from './ProjectSwitcher';
 import TeamDialog from './TeamDialog';
 import AddAssetDialog from './AddAssetDialog';
+import AccountsDialog from './AccountsDialog';
+import { AuthGate, AuthProvider, useAuth } from './auth';
 import StageStrip from './StageStrip';
 import { PipelineProvider, usePipeline } from './PipelineContext';
 import { Icon } from './ui';
@@ -18,7 +20,7 @@ import {
 
 const ALL_PROJECTS = '__all__';
 
-const TopBar = ({ projects, project, onProject, onAddProject, onResetDemo, onManageTeam, query, onQuery }) => (
+const TopBar = ({ projects, project, onProject, onAddProject, onResetDemo, onManageTeam, onManageAccounts, canManage, query, onQuery }) => (
   <header className="topbar">
     <div className="brand">
       <span className="brand-mark"><Icon name="cube" size={17} stroke={1.6} /></span>
@@ -26,10 +28,12 @@ const TopBar = ({ projects, project, onProject, onAddProject, onResetDemo, onMan
     </div>
     <span className="divider" />
     <ProjectSwitcher projects={projects} project={project} onProject={onProject} />
-    <button type="button" className="icon-btn" onClick={onAddProject} title="New project" aria-label="New project">
-      <Icon name="plus" size={16} stroke={2} />
-    </button>
-    {project === DEMO_PROJECT && (
+    {canManage && (
+      <button type="button" className="icon-btn" onClick={onAddProject} title="New project" aria-label="New project">
+        <Icon name="plus" size={16} stroke={2} />
+      </button>
+    )}
+    {canManage && project === DEMO_PROJECT && (
       <button type="button" className="btn btn-ghost btn-small" onClick={onResetDemo} title="Replace the Demo project with fresh sample data dated around today">
         Reset demo
       </button>
@@ -42,7 +46,7 @@ const TopBar = ({ projects, project, onProject, onAddProject, onResetDemo, onMan
         <button type="button" className="search-clear" onClick={() => onQuery('')} aria-label="Clear search"><Icon name="close" size={13} stroke={2} /></button>
       )}
     </label>
-    <ProfileMenu onManageTeam={onManageTeam} />
+    <ProfileMenu onManageTeam={onManageTeam} onManageAccounts={onManageAccounts} />
   </header>
 );
 
@@ -63,7 +67,9 @@ const FilterSelect = ({ label, value, options, format = (v) => v, onChange }) =>
 );
 
 const MainApp = () => {
-  const { data, projects, notice, addProject, dispatchToModelling, resetDemo } = usePipeline();
+  const { data, projects, notice, notify, addProject, dispatchToModelling, resetDemo } = usePipeline();
+  const { canManage, isAdmin } = useAuth();
+  const [accountsOpen, setAccountsOpen] = useState(false);
   const [project, setProject] = useState(projects.includes(DEMO_PROJECT) ? DEMO_PROJECT : projects[0]);
   const [mode, setMode] = useState('grid');
   const [stage, setStage] = useState('Manager');
@@ -112,7 +118,8 @@ const MainApp = () => {
     setMode('grid');
   };
 
-  const thisWeek = weekStart(todayISO());  const artistProjects = artistScope === ALL_PROJECTS ? projects : [artistScope].filter((p) => projects.includes(p));
+  const thisWeek = weekStart(todayISO());
+  const artistProjects = artistScope === ALL_PROJECTS ? projects : [artistScope].filter((p) => projects.includes(p));
   const stripActive = mode === 'grid' ? stage : mode === 'artists' ? artistStage : null;
 
   const handleAddProject = () => {
@@ -144,7 +151,7 @@ const MainApp = () => {
 
   return (
     <div className="app">
-      <TopBar projects={projects} project={activeProject} onProject={changeProject} onAddProject={handleAddProject} onResetDemo={() => { setAsset(null); resetDemo(); }} onManageTeam={() => setTeamOpen(true)} query={query} onQuery={setQuery} />
+      <TopBar projects={projects} project={activeProject} onProject={changeProject} onAddProject={handleAddProject} onResetDemo={() => { if (window.confirm('Reset the Demo project for everyone? Any changes made to it will be replaced with fresh sample data.')) { setAsset(null); resetDemo(); } }} onManageTeam={() => setTeamOpen(true)} onManageAccounts={() => setAccountsOpen(true)} canManage={canManage} query={query} onQuery={setQuery} />
 
       {!asset && (
         <>
@@ -175,10 +182,14 @@ const MainApp = () => {
                 </div>
                 <FilterSelect label="Project" value={artistScope === ALL_PROJECTS ? '' : artistScope} options={projects} onChange={(v) => setArtistScope(v || ALL_PROJECTS)} />
                 <div className="spacer" />
-                <button type="button" className="btn btn-ghost btn-small" onClick={() => setTeamOpen(true)}>
-                  <Icon name="user" size={14} stroke={2} />Manage team
-                </button>
-                <span className="divider" />
+                {canManage && (
+                  <>
+                    <button type="button" className="btn btn-ghost btn-small" onClick={() => setTeamOpen(true)}>
+                      <Icon name="user" size={14} stroke={2} />Manage team
+                    </button>
+                    <span className="divider" />
+                  </>
+                )}
                 <div className="week-nav" aria-label="Week for leaves, training and QA hours">
                   <button type="button" className="icon-btn" onClick={() => setWeek((w) => addDays(w, -7))} aria-label="Previous week"><Icon name="chevronLeft" size={15} stroke={2} /></button>
                   <span className="week-label">
@@ -202,7 +213,7 @@ const MainApp = () => {
 
             <div className="spacer" />
 
-            {mode === 'grid' && stage === 'Manager' && (
+            {mode === 'grid' && stage === 'Manager' && canManage && (
               <>
                 {selected > 0 && <span className="selection"><strong className="num">{selected}</strong> selected</span>}
                 <button type="button" className="btn btn-brand" onClick={() => dispatchToModelling(activeProject)} disabled={!selected}>
@@ -224,7 +235,15 @@ const MainApp = () => {
           {stage === 'Manager' && selected > 0 && <span><strong className="num">{selected}</strong> selected</span>}
           {(query || filters.priority || filters.artist) && <span>Filtered</span>}
           <div className="spacer" />
-          <span className="saved"><span className="saved-dot" />Saved in this browser</span>
+          <span className="row-key"><span className="key-swatch is-done" />{stage === 'Manager' ? 'Approved' : 'Done in this sheet'}</span>
+          {stage !== 'Manager' && (
+            <>
+              <span className="row-key"><span className="key-swatch is-sentback" />Sent back / reworked</span>
+              <span className="row-key"><span className="key-swatch is-split" />Split</span>
+            </>
+          )}
+          <span className="divider" />
+          <SyncIndicator />
         </footer>
       )}
 
@@ -233,24 +252,70 @@ const MainApp = () => {
           <span>{STAGE_LABEL[artistStage]} · running totals across {artistScope === ALL_PROJECTS ? `all ${projects.length} projects` : artistScope}</span>
           <span>Leaves, training and QA hours are for the week of {formatDate(week)}</span>
           <div className="spacer" />
-          <span className="saved"><span className="saved-dot" />Saved in this browser</span>
+          <SyncIndicator />
         </footer>
       )}
 
       {addOpen && <AddAssetDialog project={activeProject} onClose={() => setAddOpen(false)} onAdded={showAdded} />}
 
-      {teamOpen && <TeamDialog onClose={() => setTeamOpen(false)} defaultStage={mode === 'artists' ? artistStage : undefined} />}
+      {accountsOpen && isAdmin && <AccountsDialog onClose={() => setAccountsOpen(false)} notify={notify} />}
+
+      {teamOpen && canManage && <TeamDialog onClose={() => setTeamOpen(false)} defaultStage={mode === 'artists' ? artistStage : undefined} />}
 
       {notice && <div className="toast" role="status"><Icon name="check" size={15} stroke={2.4} />{notice}</div>}
     </div>
   );
 };
 
+const SYNC_LABEL = {
+  saved: 'All changes saved',
+  saving: 'Saving…',
+  offline: 'Can’t reach the server — retrying',
+};
+
+const SyncIndicator = () => {
+  const { syncStatus } = usePipeline();
+  return (
+    <span className={`saved is-${syncStatus}`} role="status">
+      <span className="saved-dot" />
+      {SYNC_LABEL[syncStatus]}
+    </span>
+  );
+};
+
+const LoadGate = ({ children }) => {
+  const { loadState, retryLoad } = usePipeline();
+  if (loadState.status === 'ready') return children;
+  return (
+    <div className="gate">
+      <span className="brand-mark"><Icon name="cube" size={20} stroke={1.6} /></span>
+      {loadState.status === 'loading' ? (
+        <>
+          <span className="gate-title">Loading the pipeline…</span>
+          <span className="gate-sub">Fetching the latest data shared by your team.</span>
+        </>
+      ) : (
+        <>
+          <span className="gate-title">Couldn’t load the pipeline</span>
+          <span className="gate-sub">{loadState.error || 'The server did not respond.'}</span>
+          <button type="button" className="btn btn-brand" onClick={retryLoad}>Try again</button>
+        </>
+      )}
+    </div>
+  );
+};
+
 function App() {
   return (
-    <PipelineProvider>
-      <MainApp />
-    </PipelineProvider>
+    <AuthProvider>
+      <AuthGate>
+        <PipelineProvider>
+          <LoadGate>
+            <MainApp />
+          </LoadGate>
+        </PipelineProvider>
+      </AuthGate>
+    </AuthProvider>
   );
 }
 

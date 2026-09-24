@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { usePipeline } from './PipelineContext';
+import { useAuth } from './auth';
 import { Avatar, Dash, Icon, Pill } from './ui';
 import { COMPLEXITIES, artistSummary, displayStatus, formatHours, hours, matchesQuery, statusTone } from './pipelineModel';
 
@@ -31,6 +32,8 @@ const SortTh = ({ id, sort, onSort, className = '', style, children }) => (
 
 const ArtistsView = ({ stage, projects, week, query, onOpenAsset }) => {
   const { data, setArtistLog } = usePipeline();
+  // The weekly entries (direct uploads, QA, leave…) are typed in by managers.
+  const readOnly = !useAuth().canManage;
   const [sort, setSort] = useState('completed');
   const [expanded, setExpanded] = useState(null);
 
@@ -106,6 +109,7 @@ const ArtistsView = ({ stage, projects, week, query, onOpenAsset }) => {
                         inputMode="decimal"
                         value={log[a.artist]?.[f.key] || ''}
                         placeholder="0"
+                        disabled={readOnly}
                         onChange={(e) => setArtistLog(week, a.artist, f.key, e.target.value)}
                         aria-label={`${f.label} for ${a.artist}`}
                       />
