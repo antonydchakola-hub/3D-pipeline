@@ -78,6 +78,14 @@ const ARTIST_LOG = {
   },
 };
 
+const DEMO_COMMENTS = {
+  '95054002': 'Client wants the matte black variant, not gloss.',
+  '95053918': 'Reference photos are in the shared drive, folder 1142.',
+  '95053940': 'Hero asset for the homepage banner — prioritise render quality.',
+  '95053851': 'Use the updated dimensions from the supplier sheet (v2).',
+  '95053966': 'Same base mesh as 95053851 — reuse where possible.',
+};
+
 const CURRENT = [
   {
     tcin: '95053903', priority: 'High Priority', complexity: 'Hard', allot: -16, due: -4,
@@ -294,6 +302,8 @@ export const buildDemoProject = (today = todayISO()) => {
     });
   });
 
+  out.assetComments = { ...DEMO_COMMENTS };
+
   const thisWeek = weekStart(today);
   out.artistLog = Object.fromEntries(
     Object.entries(ARTIST_LOG).map(([offset, entries]) => [addDays(thisWeek, Number(offset) * 7), entries]),
@@ -312,6 +322,7 @@ export const withDemoProject = (state, { replace = false } = {}) => {
   return {
     ...state,
     artistLog,
+    assetComments: { ...state.assetComments, [DEMO_PROJECT]: demo.assetComments },
     Manager: { ...state.Manager, [DEMO_PROJECT]: demo.Manager },
     Modelling: { ...state.Modelling, [DEMO_PROJECT]: demo.Modelling },
     Texturing: { ...state.Texturing, [DEMO_PROJECT]: demo.Texturing },

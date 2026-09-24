@@ -28,7 +28,13 @@ const initialData = {
   Lighting: { 'Testing': [], 'C6_2026': [] },
   events: { 'Testing': [], 'C6_2026': [] },
   artistLog: {},
+  assetComments: {},
 };
+
+const withAssetComment = (state, project, tcn, text) => ({
+  ...state,
+  assetComments: { ...state.assetComments, [project]: { ...state.assetComments?.[project], [tcn]: text } },
+});
 
 const makeEvent = (tcn, kind, stage, text, extra = {}) => ({
   id: generateId(),
@@ -67,16 +73,50 @@ const replaceRows = (state, stage, project, rows) => ({
   [stage]: { ...state[stage], [project]: rows },
 });
 
-export const PipelineProvider = ({ children }) => {
-  const [data, setData] = useState(() => {
-    const saved = localStorage.getItem('pipelineData');
-    if (!saved) return withDemoProject(initialData);
-    try {
-      return withDemoProject({ ...initialData, ...JSON.parse(saved) });
-    } catch {
-      return withDemoProject(initialData);
+// The names the dropdowns offered before there was a roster.
+const LEGACY_ARTISTS = ['Test', 'Artist A', 'Artist B'];
+const MANAGER_ARTIST_FIELDS = { modArtist: 'Modelling', textArtist: 'Texturing', qaArtist: 'Lighting' };
+
+const newMember = (name, stages = [], extra = {}) => ({
+  id: generateId(), name, stages, email: '', role: 'Artist', active: true, ...extra,
+});
+
+// Everyone who already appears in the data joins the roster, with the stages they have worked in.
+const withRoster = (state) => {
+  const roster = Array.isArray(state.artists) ? state.artists.map((a) => ({ ...a, stages: [...(a.stages || [])] })) : [];
+  const byName = new Map(roster.map((a) => [a.name.toLowerCase(), a]));
+  const add = (name, stage) => {
+    const clean = String(name || '').trim();
+    if (!clean) return;
+    let member = byName.get(clean.toLowerCase());
+    if (!member) {
+      member = newMember(clean);
+      byName.set(clean.toLowerCase(), member);
+      roster.push(member);
     }
-  });
+    if (stage && !member.stages.includes(stage)) member.stages.push(stage);
+  };
+  if (!Array.isArray(state.artists)) LEGACY_ARTISTS.forEach((name) => STAGES.forEach((stage) => add(name, stage)));
+  for (const stage of STAGES) {
+    for (const rows of Object.values(state[stage] || {})) rows.forEach((r) => add(r.artist, stage));
+  }
+  for (const rows of Object.values(state.Manager || {})) {
+    rows.forEach((r) => Object.entries(MANAGER_ARTIST_FIELDS).forEach(([field, stage]) => add(r[field], stage)));
+  }
+  return { ...state, artists: roster };
+};
+
+const loadInitial = () => {
+  const saved = localStorage.getItem('pipelineData');
+  try {
+    return withRoster(withDemoProject(saved ? { ...initialData, ...JSON.parse(saved) } : initialData));
+  } catch {
+    return withRoster(withDemoProject(initialData));
+  }
+};
+
+export const PipelineProvider = ({ children }) => {
+  const [data, setData] = useState(loadInitial);
   const [notice, setNotice] = useState(null);
   const noticeTimer = useRef(null);
 
@@ -210,6 +250,11 @@ export const PipelineProvider = ({ children }) => {
     });
   };
 
+  const setAssetComment = (project, tcn, text) => {
+    if (!tcn) return;
+    setData(prev => withAssetComment(prev, project, tcn, text));
+  };
+
   const addComment = (project, tcn, stage, comment) => {
     setData(prev => withEvents(prev, project, [makeEvent(tcn, 'comment', stage, 'Comment', { comment })]));
   };
@@ -236,6 +281,7 @@ export const PipelineProvider = ({ children }) => {
           next = replaceRows(next, toStage, project, [...(prev[toStage][project] || []), duplicated]);
         }
         const text = toStage === stage ? `Internal rework in ${stage}` : `Sent back from ${stage} to ${toStage}`;
+        if (comment) next = withAssetComment(next, project, row.tcn, comment);
         return withEvents(next, project, [makeEvent(row.tcn, 'rework', toStage, text, { from: stage, comment })]);
       });
       incrementManagerRework(project, row.tcn, counterField);
@@ -357,15 +403,64 @@ export const PipelineProvider = ({ children }) => {
     });
   };
 
+  const addArtist = ({ name, stages, email = '', role = 'Artist' }) => {
+    const clean = name.trim();
+    if (!clean || (data.artists || []).some(a => a.name.toLowerCase() === clean.toLowerCase())) return false;
+    setData(prev => ({ ...prev, artists: [...(prev.artists || []), newMember(clean, stages, { email: email.trim(), role })] }));
+    notify(`${clean} added to the team`);
+    return true;
+  };
+
+  const updateArtist = (id, changes) => {
+    setData(prev => ({ ...prev, artists: prev.artists.map(a => (a.id === id ? { ...a, ...changes } : a)) }));
+  };
+
+  // Renaming also updates every row and weekly entry that uses the old name, so history stays attached.
+  const renameArtist = (id, nextName) => {
+    const clean = nextName.trim();
+    const member = data.artists.find(a => a.id === id);
+    if (!member || !clean || clean === member.name) return false;
+    if (data.artists.some(a => a.id !== id && a.name.toLowerCase() === clean.toLowerCase())) return false;
+    const from = member.name;
+    setData(prev => {
+      const next = { ...prev, artists: prev.artists.map(a => (a.id === id ? { ...a, name: clean } : a)) };
+      for (const stage of STAGES) {
+        next[stage] = Object.fromEntries(Object.entries(prev[stage] || {}).map(([project, rows]) => [
+          project, rows.map(r => (r.artist === from ? { ...r, artist: clean } : r)),
+        ]));
+      }
+      next.Manager = Object.fromEntries(Object.entries(prev.Manager || {}).map(([project, rows]) => [
+        project,
+        rows.map(r => {
+          const updated = { ...r };
+          for (const field of Object.keys(MANAGER_ARTIST_FIELDS)) if (updated[field] === from) updated[field] = clean;
+          return updated;
+        }),
+      ]));
+      next.artistLog = Object.fromEntries(Object.entries(prev.artistLog || {}).map(([week, entries]) => {
+        if (!entries[from]) return [week, entries];
+        const { [from]: moved, ...rest } = entries;
+        return [week, { ...rest, [clean]: moved }];
+      }));
+      return next;
+    });
+    notify(`Renamed ${from} to ${clean} everywhere`);
+    return true;
+  };
+
+  const removeArtist = (id) => {
+    setData(prev => ({ ...prev, artists: prev.artists.filter(a => a.id !== id) }));
+  };
+
   const resetDemo = () => {
-    setData(prev => withDemoProject(prev, { replace: true }));
+    setData(prev => withRoster(withDemoProject(prev, { replace: true })));
     notify('Demo data regenerated around today’s date');
   };
 
   const projects = Object.keys(data.Manager);
 
   return (
-    <PipelineContext.Provider value={{ data, projects, notice, updateRow, dispatchToModelling, handleStatusChange, addManagerRow, addProject, addComment, resetDemo, setArtistLog }}>
+    <PipelineContext.Provider value={{ data, projects, notice, updateRow, dispatchToModelling, handleStatusChange, addManagerRow, addProject, addComment, resetDemo, setArtistLog, addArtist, updateArtist, renameArtist, removeArtist, setAssetComment }}>
       {children}
     </PipelineContext.Provider>
   );

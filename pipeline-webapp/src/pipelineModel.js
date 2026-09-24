@@ -14,7 +14,7 @@ export const REWORK_FIELD = { Modelling: 'modRework', Texturing: 'textRework', L
 export const PRIORITIES = ['High Priority', 'Medium Priority', 'Low Priority'];
 export const COMPLEXITIES = ['Very Simple', 'Simple', 'Medium', 'Hard', 'Very Hard'];
 export const TYPES = ['new', 'rework'];
-export const ARTISTS = ['Test', 'Artist A', 'Artist B'];
+export const ROLES = ['Artist', 'Manager'];
 export const MAIN_STATUSES = ['Uploaded', 'Approved', 'Rework'];
 
 export const STATUS_OPTIONS = {
@@ -106,6 +106,20 @@ export const stageSnapshot = (data, project, stage, tcn) => {
   return open[open.length - 1] || rows[rows.length - 1];
 };
 
+// One comment per TCN, shared by every sheet. Until someone edits it, it falls back to the latest note written on a stage row.
+export const assetComment = (data, project, tcn) => {
+  if (!tcn) return '';
+  const stored = data?.assetComments?.[project]?.[tcn];
+  if (stored !== undefined) return stored;
+  const pos = currentPosition(data, project, tcn);
+  if (pos?.row?.comments) return pos.row.comments;
+  for (const stage of ['Lighting', 'Texturing', 'Modelling']) {
+    const withNote = rowsFor(data, stage, project).filter((r) => r.tcn === tcn && r.comments);
+    if (withNote.length) return withNote[withNote.length - 1].comments;
+  }
+  return '';
+};
+
 export const displayStatus = (status) => {
   if (!status) return '';
   if (status.startsWith('Sent to')) return 'Done';
@@ -116,13 +130,18 @@ export const displayStatus = (status) => {
 
 export const statusTone = (status) => {
   if (!status) return 'empty';
-  if (status === 'Approved' || status === 'Done' || status === 'Split Done' || status.startsWith('Sent to')) return 'good';
+  if (status === 'Approved') return 'good-solid';
+  if (status === 'Done' || status === 'Split Done' || status.startsWith('Sent to')) return 'good';
   if (status.startsWith('Rework') || status === 'Archived Rework' || status === 'Sent back') return 'rework';
   if (status === 'Uploaded') return 'light';
   return 'neutral';
 };
 
-export const priorityTone = (p) => (p === 'High Priority' ? 'danger' : p ? 'neutral' : 'empty');
+export const priorityTone = (p) => {
+  if (p === 'High Priority') return 'danger-solid';
+  if (p === 'Medium Priority') return 'amber';
+  return p ? 'neutral' : 'empty';
+};
 export const typeTone = (t) => (t === 'rework' ? 'rework' : t === 'new' ? 'brand' : 'empty');
 
 export const isOverdue = (row, today = todayISO()) =>
@@ -130,9 +149,9 @@ export const isOverdue = (row, today = todayISO()) =>
 
 export const assetStage = (data, project, mgrRow) => {
   const tcn = mgrRow?.tcin;
-  if (mgrRow?.mainStatus === 'Approved') return { key: 'approved', label: 'Approved', tone: 'good' };
+  if (mgrRow?.mainStatus === 'Approved') return { key: 'approved', label: 'Approved', tone: 'good-solid' };
   const pos = currentPosition(data, project, tcn);
-  if (pos?.stage === 'Lighting' && pos.row.status === 'Approved') return { key: 'approved', label: 'Approved', tone: 'good', ...pos };
+  if (pos?.stage === 'Lighting' && pos.row.status === 'Approved') return { key: 'approved', label: 'Approved', tone: 'good-solid', ...pos };
   if (mgrRow?.mainStatus === 'Uploaded' || (pos?.stage === 'Lighting' && pos.row.status === 'Uploaded')) {
     return { key: 'uploaded', label: 'Uploaded', tone: 'light', ...pos };
   }
@@ -266,6 +285,26 @@ export const consoleMetrics = (data, project, today = todayISO()) => {
   };
 };
 
+export const activeArtists = (data) => (data?.artists || []).filter((a) => a.active !== false);
+
+// Names offered in a stage's Artist dropdown: active artists who work in that stage (everyone active if none do).
+export const artistOptions = (data, stage) => {
+  const active = activeArtists(data);
+  const forStage = stage ? active.filter((a) => a.stages?.includes(stage)) : active;
+  return (forStage.length ? forStage : active).map((a) => a.name).sort((a, b) => a.localeCompare(b));
+};
+
+export const artistUsage = (data, name) => {
+  let rows = 0;
+  for (const stage of STAGES) {
+    for (const projectRows of Object.values(data?.[stage] || {})) rows += projectRows.filter((r) => r.artist === name).length;
+  }
+  for (const projectRows of Object.values(data?.Manager || {})) {
+    rows += projectRows.filter((r) => r.modArtist === name || r.textArtist === name || r.qaArtist === name).length;
+  }
+  return rows;
+};
+
 // Artist summary definitions — change here if the sheet's formulas count differently.
 export const isCompletedIn = (stage, row) => {
   if (stage === 'Lighting') return row.status === 'Uploaded' || row.status === 'Approved';
@@ -312,6 +351,10 @@ export const artistSummary = (data, projects, stage) => {
         a.inProgress += 1;
       }
     }
+  }
+  // Like the sheet, list everyone on the team for this stage, even with nothing done yet.
+  for (const member of activeArtists(data)) {
+    if (member.stages?.includes(stage) && !byArtist.has(member.name)) byArtist.set(member.name, blankArtist(member.name));
   }
   return [...byArtist.values()];
 };

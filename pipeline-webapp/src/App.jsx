@@ -4,17 +4,19 @@ import ProductionView from './ProductionView';
 import ConsoleView from './ConsoleView';
 import AssetRecord from './AssetRecord';
 import ArtistsView from './ArtistsView';
+import ProfileMenu from './ProfileMenu';
+import TeamDialog from './TeamDialog';
 import StageStrip from './StageStrip';
 import { PipelineProvider, usePipeline } from './PipelineContext';
 import { Icon } from './ui';
 import { DEMO_PROJECT } from './mockData';
 import {
-  ARTISTS, PRIORITIES, STAGES, STAGE_LABEL, addDays, formatDate, priorityShort, rowsFor, stageHealth, todayISO, weekStart,
+  PRIORITIES, STAGES, STAGE_LABEL, addDays, formatDate, priorityShort, rowsFor, stageHealth, todayISO, weekStart,
 } from './pipelineModel';
 
 const ALL_PROJECTS = '__all__';
 
-const TopBar = ({ projects, project, onProject, onAddProject, onResetDemo, query, onQuery }) => (
+const TopBar = ({ projects, project, onProject, onAddProject, onResetDemo, onManageTeam, query, onQuery }) => (
   <header className="topbar">
     <div className="brand">
       <span className="brand-mark"><Icon name="cube" size={17} stroke={1.6} /></span>
@@ -44,6 +46,7 @@ const TopBar = ({ projects, project, onProject, onAddProject, onResetDemo, query
         <button type="button" className="search-clear" onClick={() => onQuery('')} aria-label="Clear search"><Icon name="close" size={13} stroke={2} /></button>
       )}
     </label>
+    <ProfileMenu onManageTeam={onManageTeam} />
   </header>
 );
 
@@ -74,13 +77,14 @@ const MainApp = () => {
   const [artistStage, setArtistStage] = useState('Modelling');
   const [artistScope, setArtistScope] = useState(ALL_PROJECTS);
   const [week, setWeek] = useState(() => weekStart(todayISO()));
+  const [teamOpen, setTeamOpen] = useState(false);
 
   const activeProject = projects.includes(project) ? project : projects[0];
   const health = stageHealth(data, activeProject);
   const managerRows = rowsFor(data, 'Manager', activeProject);
   const selected = managerRows.filter((r) => r.checked && r.tcin).length;
   const stageRows = stage === 'Manager' ? managerRows : rowsFor(data, stage, activeProject);
-  const artists = [...new Set([...ARTISTS, ...STAGES.flatMap((s) => rowsFor(data, s, activeProject).map((r) => r.artist)).filter(Boolean)])];
+  const artists = (data.artists || []).map((a) => a.name).sort((a, b) => a.localeCompare(b));
 
   const openAsset = (tcn, inProject) => {
     if (!tcn) return;
@@ -131,7 +135,7 @@ const MainApp = () => {
 
   return (
     <div className="app">
-      <TopBar projects={projects} project={activeProject} onProject={changeProject} onAddProject={handleAddProject} onResetDemo={() => { setAsset(null); resetDemo(); }} query={query} onQuery={setQuery} />
+      <TopBar projects={projects} project={activeProject} onProject={changeProject} onAddProject={handleAddProject} onResetDemo={() => { setAsset(null); resetDemo(); }} onManageTeam={() => setTeamOpen(true)} query={query} onQuery={setQuery} />
 
       {!asset && (
         <>
@@ -162,6 +166,10 @@ const MainApp = () => {
                 </div>
                 <FilterSelect label="Project" value={artistScope === ALL_PROJECTS ? '' : artistScope} options={projects} onChange={(v) => setArtistScope(v || ALL_PROJECTS)} />
                 <div className="spacer" />
+                <button type="button" className="btn btn-ghost btn-small" onClick={() => setTeamOpen(true)}>
+                  <Icon name="user" size={14} stroke={2} />Manage team
+                </button>
+                <span className="divider" />
                 <div className="week-nav" aria-label="Week for leaves, training and QA hours">
                   <button type="button" className="icon-btn" onClick={() => setWeek((w) => addDays(w, -7))} aria-label="Previous week"><Icon name="chevronLeft" size={15} stroke={2} /></button>
                   <span className="week-label">
@@ -220,6 +228,8 @@ const MainApp = () => {
           <span className="saved"><span className="saved-dot" />Saved in this browser</span>
         </footer>
       )}
+
+      {teamOpen && <TeamDialog onClose={() => setTeamOpen(false)} defaultStage={mode === 'artists' ? artistStage : undefined} />}
 
       {notice && <div className="toast" role="status"><Icon name="check" size={15} stroke={2.4} />{notice}</div>}
     </div>

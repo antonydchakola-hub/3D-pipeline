@@ -2,14 +2,14 @@ import React from 'react';
 import { usePipeline } from './PipelineContext';
 import { Avatar, Icon, Pill, PillSelect } from './ui';
 import {
-  ARTISTS, COMPLEXITIES, PRIORITIES, STAGE_TONE, STATUS_OPTIONS, TYPES,
-  displayStatus, formatHours, hours, isArchived, isLocked, isOverdue, matchesQuery,
+  COMPLEXITIES, PRIORITIES, STAGE_TONE, STATUS_OPTIONS, TYPES, artistOptions as rosterOptions,
+  assetComment, displayStatus, formatHours, hours, isArchived, isLocked, isOverdue, matchesQuery,
   priorityShort, priorityTone, rowsFor, statusTone, todayISO, typeTone,
 } from './pipelineModel';
 
 const FROZEN = [
-  { width: 56, left: 0 },
-  { width: 156, left: 56 },
+  { width: 44, left: 0 },
+  { width: 132, left: 44 },
 ];
 const frozenStyle = (i) => ({ left: FROZEN[i].left, width: FROZEN[i].width, minWidth: FROZEN[i].width });
 
@@ -31,18 +31,19 @@ const TimeCell = ({ row, disabled, onChange, tone }) => {
 };
 
 const ProductionView = ({ stageName, project, query, filters, onOpenAsset }) => {
-  const { data, updateRow, handleStatusChange } = usePipeline();
+  const { data, updateRow, handleStatusChange, setAssetComment } = usePipeline();
   const today = todayISO();
   const tone = STAGE_TONE[stageName];
   const all = rowsFor(data, stageName, project);
   const set = (id, field) => (value) => updateRow(stageName, project, id, field, value);
 
-  const artistOptions = [...new Set([...ARTISTS, ...all.map((r) => r.artist).filter(Boolean)])];
+  const artistOptions = rosterOptions(data, stageName);
 
+  const commentFor = (tcn) => assetComment(data, project, tcn);
   const rows = all.filter((row) => {
     if (filters.priority && row.priority !== filters.priority) return false;
     if (filters.artist && row.artist !== filters.artist) return false;
-    return matchesQuery(query, row.tcn, row.no, row.artist, row.comments);
+    return matchesQuery(query, row.tcn, row.no, row.artist, commentFor(row.tcn));
   });
 
   if (!all.length) {
@@ -77,6 +78,7 @@ const ProductionView = ({ stageName, project, query, filters, onOpenAsset }) => 
             const locked = isLocked(row);
             const overdue = isOverdue(row, today);
             const rework = row.type === 'rework' && !locked;
+            const comment = commentFor(row.tcn);
             return (
               <tr key={row.id} className={`${locked ? 'is-archived' : ''}${overdue ? ' is-overdue' : ''}${rework ? ' is-rework' : ''}`}>
                 <td className="sticky" style={frozenStyle(0)}><span className="mono muted">{row.no}</span></td>
@@ -90,7 +92,15 @@ const ProductionView = ({ stageName, project, query, filters, onOpenAsset }) => 
                   )}
                 </td>
                 <td className="col-comment">
-                  <input className={`cell-input${rework && row.comments ? ' is-feedback' : ''}`} value={row.comments || ''} disabled={locked} placeholder={locked ? '' : 'Add a note'} onChange={(e) => set(row.id, 'comments')(e.target.value)} aria-label="Comments" />
+                  <input
+                    className={`cell-input${rework && comment ? ' is-feedback' : ''}`}
+                    value={comment}
+                    title={comment}
+                    disabled={locked}
+                    placeholder={locked ? '' : 'Add a comment'}
+                    onChange={(e) => setAssetComment(project, row.tcn, e.target.value)}
+                    aria-label="Comments"
+                  />
                 </td>
                 <td><PillSelect options={TYPES} value={row.type} onChange={set(row.id, 'type')} tone={typeTone(row.type)} disabled={locked} placeholder="Type" label="Type" /></td>
                 <td><PillSelect options={PRIORITIES} value={row.priority} onChange={set(row.id, 'priority')} tone={priorityTone(row.priority)} format={priorityShort} disabled={locked} placeholder="Priority" label="Priority" /></td>
