@@ -155,6 +155,9 @@ export const assetStage = (data, project, mgrRow) => {
   if (mgrRow?.mainStatus === 'Uploaded' || (pos?.stage === 'Lighting' && pos.row.status === 'Uploaded')) {
     return { key: 'uploaded', label: 'Uploaded', tone: 'light', ...pos };
   }
+  if (mgrRow?.mainStatus === 'Rework') {
+    return { key: 'rework', label: pos ? `Rework · ${pos.stage}` : 'Rework', tone: 'rework', ...pos };
+  }
   if (!pos) {
     if (!isDispatched(data, project, tcn)) return { key: 'queue', label: 'Queue', tone: 'neutral' };
     const wasSplit = STAGES.some((stage) => rowsFor(data, stage, project).some((r) => r.tcn === tcn && r.status === 'Archived Split'));

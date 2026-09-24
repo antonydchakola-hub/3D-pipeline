@@ -229,6 +229,14 @@ button.strip-item:hover .strip-name { color: var(--ink-800); }
 .pill-select svg { position: absolute; right: 8px; pointer-events: none; opacity: 0.65; }
 .pill-select:hover:not(.is-disabled) { box-shadow: inset 0 0 0 1px rgba(15, 24, 38, 0.08); }
 .pill-select:focus-within { outline: 2px solid var(--brand); outline-offset: 1px; }
+.status-pill {
+  position: relative; display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 999px;
+  background: var(--tone-50); color: var(--tone-ink); font-size: 12px; font-weight: 600; white-space: nowrap; cursor: pointer;
+}
+.status-pill svg { opacity: 0.6; margin-left: 1px; }
+.status-pill select { position: absolute; inset: 0; width: 100%; opacity: 0; cursor: pointer; font-size: 12px; }
+.status-pill:hover { box-shadow: inset 0 0 0 1px rgba(15, 24, 38, 0.12); }
+.status-pill:focus-within { outline: 2px solid var(--brand); outline-offset: 1px; }
 .pill-select.tone-empty { background: transparent; border: 1px dashed #cdd6e2; }
 .pill-select.tone-empty select { padding-left: 9px; }
 .pill-select.tone-plain { background: transparent; }

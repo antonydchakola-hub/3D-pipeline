@@ -52,7 +52,7 @@ const ManagerView = ({ project, query, filters, onOpenAsset }) => {
             {STAGES.map((stage) => (
               <th key={stage} colSpan={3} className={`band-${STAGE_TONE[stage]}`}><span className="band-label">{STAGE_LABEL[stage]}</span></th>
             ))}
-            <th colSpan={6} className="band-overall"><span className="band-label">Overall</span></th>
+            <th colSpan={5} className="band-overall"><span className="band-label">Overall</span></th>
           </tr>
           <tr className="cols">
             <th className="sticky" style={frozenStyle(0)} aria-label="Select" />
@@ -69,15 +69,14 @@ const ManagerView = ({ project, query, filters, onOpenAsset }) => {
             ))}
             <th className="col-date">Allotted</th>
             <th className="col-date">Due</th>
-            <th className="col-stage">Stage</th>
-            <th className="col-status">Main status</th>
+            <th className="col-stage">Status</th>
             <th className="col-date">Uploaded</th>
             <th className="col-date">Approved</th>
           </tr>
         </thead>
         <tbody>
           {rows.length === 0 && (
-            <tr><td colSpan={20} className="no-match">No assets match the current search or filters.</td></tr>
+            <tr><td colSpan={19} className="no-match">No assets match the current search or filters.</td></tr>
           )}
           {rows.map(({ row, view, comment }) => {
             const { position, dispatched } = view;
@@ -156,9 +155,16 @@ const ManagerView = ({ project, query, filters, onOpenAsset }) => {
                     </span>
                   ) : <Dash />}
                 </td>
-                <td className="col-stage"><Pill tone={position.tone} dot>{position.label}</Pill></td>
-                <td className="col-status">
-                  <PillSelect options={MAIN_STATUSES} value={row.mainStatus} onChange={set(row.id, 'mainStatus')} tone={statusTone(row.mainStatus)} placeholder="—" label="Main status" />
+                <td className="col-stage">
+                  <label className={`status-pill tone-${position.tone}`} title={row.mainStatus ? `Main status: ${row.mainStatus}` : 'Follows the stage sheets — click to set the main status'}>
+                    <span className="pill-dot" />
+                    {position.label}
+                    <Icon name="chevronDown" size={12} stroke={2} />
+                    <select value={row.mainStatus || ''} onChange={(e) => set(row.id, 'mainStatus')(e.target.value)} aria-label={`Status of ${row.tcin || 'new asset'}: ${position.label}. Set main status`}>
+                      <option value="">Automatic (follow the stages)</option>
+                      {MAIN_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </label>
                 </td>
                 <td className="col-date">
                   <input type="date" className="cell-input date" value={row.uploadDate || ''} onChange={(e) => set(row.id, 'uploadDate')(e.target.value)} aria-label="Upload date" />
