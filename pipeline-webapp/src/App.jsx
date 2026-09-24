@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import ManagerView from './ManagerView';
 import ProductionView from './ProductionView';
 import ConsoleView from './ConsoleView';
 import AssetRecord from './AssetRecord';
 import ArtistsView from './ArtistsView';
 import ProfileMenu from './ProfileMenu';
+import ProjectSwitcher from './ProjectSwitcher';
 import TeamDialog from './TeamDialog';
+import AddAssetDialog from './AddAssetDialog';
 import StageStrip from './StageStrip';
 import { PipelineProvider, usePipeline } from './PipelineContext';
 import { Icon } from './ui';
@@ -23,13 +25,7 @@ const TopBar = ({ projects, project, onProject, onAddProject, onResetDemo, onMan
       <span className="brand-name">3D Model Pipeline</span>
     </div>
     <span className="divider" />
-    <label className="project-switch">
-      <span className="eyebrow">Project</span>
-      <select value={project} onChange={(e) => onProject(e.target.value)} aria-label="Project">
-        {projects.map((p) => <option key={p} value={p}>{p}</option>)}
-      </select>
-      <Icon name="chevronDown" size={14} />
-    </label>
+    <ProjectSwitcher projects={projects} project={project} onProject={onProject} />
     <button type="button" className="icon-btn" onClick={onAddProject} title="New project" aria-label="New project">
       <Icon name="plus" size={16} stroke={2} />
     </button>
@@ -67,7 +63,7 @@ const FilterSelect = ({ label, value, options, format = (v) => v, onChange }) =>
 );
 
 const MainApp = () => {
-  const { data, projects, notice, addProject, addManagerRow, dispatchToModelling, resetDemo } = usePipeline();
+  const { data, projects, notice, addProject, dispatchToModelling, resetDemo } = usePipeline();
   const [project, setProject] = useState(projects.includes(DEMO_PROJECT) ? DEMO_PROJECT : projects[0]);
   const [mode, setMode] = useState('grid');
   const [stage, setStage] = useState('Manager');
@@ -78,6 +74,20 @@ const MainApp = () => {
   const [artistScope, setArtistScope] = useState(ALL_PROJECTS);
   const [week, setWeek] = useState(() => weekStart(todayISO()));
   const [teamOpen, setTeamOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  const [highlightId, setHighlightId] = useState(null);
+  const highlightTimer = useRef(null);
+
+  const showAdded = (id) => {
+    setMode('grid');
+    setStage('Manager');
+    setAsset(null);
+    setQuery('');
+    setFilters({ priority: '', artist: '' });
+    setHighlightId(id);
+    clearTimeout(highlightTimer.current);
+    highlightTimer.current = setTimeout(() => setHighlightId(null), 2600);
+  };
 
   const activeProject = projects.includes(project) ? project : projects[0];
   const health = stageHealth(data, activeProject);
@@ -102,8 +112,7 @@ const MainApp = () => {
     setMode('grid');
   };
 
-  const thisWeek = weekStart(todayISO());
-  const artistProjects = artistScope === ALL_PROJECTS ? projects : [artistScope].filter((p) => projects.includes(p));
+  const thisWeek = weekStart(todayISO());  const artistProjects = artistScope === ALL_PROJECTS ? projects : [artistScope].filter((p) => projects.includes(p));
   const stripActive = mode === 'grid' ? stage : mode === 'artists' ? artistStage : null;
 
   const handleAddProject = () => {
@@ -128,7 +137,7 @@ const MainApp = () => {
   } else if (mode === 'artists') {
     content = <ArtistsView stage={artistStage} projects={artistProjects} week={week} query={query} onOpenAsset={openAsset} />;
   } else if (stage === 'Manager') {
-    content = <ManagerView project={activeProject} query={query} filters={filters} onOpenAsset={openAsset} />;
+    content = <ManagerView project={activeProject} query={query} filters={filters} onOpenAsset={openAsset} highlightId={highlightId} />;
   } else {
     content = <ProductionView stageName={stage} project={activeProject} query={query} filters={filters} onOpenAsset={openAsset} />;
   }
@@ -199,12 +208,11 @@ const MainApp = () => {
                 <button type="button" className="btn btn-brand" onClick={() => dispatchToModelling(activeProject)} disabled={!selected}>
                   Dispatch to Modelling<Icon name="arrowRight" size={15} stroke={2.1} />
                 </button>
-                <button type="button" className="btn btn-ghost" onClick={() => addManagerRow(activeProject)}>
+                <button type="button" className="btn btn-ghost" onClick={() => setAddOpen(true)}>
                   <Icon name="plus" size={14} stroke={2.1} />Add asset
                 </button>
               </>
-            )}
-          </div>
+            )}          </div>
         </>
       )}
 
@@ -228,6 +236,8 @@ const MainApp = () => {
           <span className="saved"><span className="saved-dot" />Saved in this browser</span>
         </footer>
       )}
+
+      {addOpen && <AddAssetDialog project={activeProject} onClose={() => setAddOpen(false)} onAdded={showAdded} />}
 
       {teamOpen && <TeamDialog onClose={() => setTeamOpen(false)} defaultStage={mode === 'artists' ? artistStage : undefined} />}
 

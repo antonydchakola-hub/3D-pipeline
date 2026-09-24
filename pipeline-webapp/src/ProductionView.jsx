@@ -3,7 +3,7 @@ import { usePipeline } from './PipelineContext';
 import { Avatar, Icon, Pill, PillSelect } from './ui';
 import {
   COMPLEXITIES, PRIORITIES, STAGE_TONE, STATUS_OPTIONS, TYPES, artistOptions as rosterOptions,
-  assetComment, displayStatus, formatHours, hours, isArchived, isLocked, isOverdue, matchesQuery,
+  assetComment, displayStatus, formatHours, isSendBack, hours, isArchived, isLocked, isOverdue, matchesQuery,
   priorityShort, priorityTone, rowsFor, statusTone, todayISO, typeTone,
 } from './pipelineModel';
 
@@ -120,7 +120,13 @@ const ProductionView = ({ stageName, project, query, filters, onOpenAsset }) => 
                 </td>
                 <td className="col-status">
                   {locked ? (
-                    <Pill tone={statusTone(row.status)} icon={isArchived(row) ? 'rework' : 'check'} title={row.status}>{isArchived(row) ? row.status : displayStatus(row.status)}</Pill>
+                    <Pill
+                      tone={statusTone(row.status, stageName)}
+                      icon={isArchived(row) || isSendBack(stageName, row.status) ? 'rework' : 'check'}
+                      title={row.status}
+                    >
+                      {isArchived(row) || isSendBack(stageName, row.status) ? row.status : displayStatus(row.status, stageName)}
+                    </Pill>
                   ) : (
                     <PillSelect options={STATUS_OPTIONS[stageName]} value={row.status} onChange={(v) => handleStatusChange(stageName, project, row.id, v)} tone={statusTone(row.status)} placeholder="In progress" label="Status" />
                   )}

@@ -192,50 +192,53 @@ export const PipelineProvider = ({ children }) => {
     notify(`${checkedRows.length} asset${checkedRows.length === 1 ? '' : 's'} dispatched to Modelling`);
   };
 
-  const addManagerRow = (project) => {
-    setData(prev => {
-      const projData = prev.Manager[project] || [];
-
-      let nextNo = '1';
-      if (projData.length > 0) {
-        const lastNo = String(projData[projData.length - 1].no).trim();
-        const parsed = parseInt(lastNo, 10);
-
-        if (!isNaN(parsed) && String(parsed) === lastNo) {
-          nextNo = String(parsed + 1);
-        } else {
-          const match = lastNo.match(/^(.*?)(\d+)$/);
-          if (match) {
-            nextNo = match[1] + (parseInt(match[2], 10) + 1);
-          } else {
-            nextNo = lastNo ? `${lastNo}-new` : '1';
-          }
-        }
-      }
-
-      const newRow = {
-        id: generateId(),
-        checked: false,
-        no: nextNo,
-        tcin: '',
-        priority: '',
-        allotDate: '',
-        modArtist: '',
-        modStatus: '',
-        textArtist: '',
-        textStatus: '',
-        qaArtist: '',
-        uploadDate: '',
-        mainStatus: '',
-        approvedDate: '',
-        modRework: 0,
-        textRework: 0,
-        lightRework: 0
-      };
-      return { ...prev, Manager: { ...prev.Manager, [project]: [...projData, newRow] } };
-    });
+  const nextAssetNumber = (project) => {
+    const projData = data.Manager[project] || [];
+    if (!projData.length) return '1';
+    const lastNo = String(projData[projData.length - 1].no ?? '').trim();
+    const parsed = parseInt(lastNo, 10);
+    if (!isNaN(parsed) && String(parsed) === lastNo) return String(parsed + 1);
+    const match = lastNo.match(/^(.*?)(\d+)$/);
+    if (match) return match[1] + (parseInt(match[2], 10) + 1);
+    return lastNo ? `${lastNo}-new` : '1';
   };
 
+  const findAsset = (project, tcin) => {
+    const clean = String(tcin || '').trim().toLowerCase();
+    return (data.Manager[project] || []).find(r => String(r.tcin || '').trim().toLowerCase() === clean);
+  };
+
+  // Returns the new row's id, or an error message.
+  const addAsset = (project, { tcin, no, priority, allotDate, comment }) => {
+    const cleanTcin = String(tcin || '').trim();
+    if (!cleanTcin) return { error: 'Enter a TCIN' };
+    if (findAsset(project, cleanTcin)) return { error: `${cleanTcin} is already in ${project}` };
+    const newRow = {
+      id: generateId(),
+      checked: false,
+      no: String(no || '').trim() || nextAssetNumber(project),
+      tcin: cleanTcin,
+      priority: priority || '',
+      allotDate: allotDate || '',
+      modArtist: '',
+      modStatus: '',
+      textArtist: '',
+      textStatus: '',
+      qaArtist: '',
+      uploadDate: '',
+      mainStatus: '',
+      approvedDate: '',
+      modRework: 0,
+      textRework: 0,
+      lightRework: 0,
+    };
+    setData(prev => {
+      const next = { ...prev, Manager: { ...prev.Manager, [project]: [...(prev.Manager[project] || []), newRow] } };
+      return comment?.trim() ? withAssetComment(next, project, cleanTcin, comment.trim()) : next;
+    });
+    notify(`${cleanTcin} added to ${project}`);
+    return { id: newRow.id };
+  };
   const updateRow = (stage, project, id, field, value) => {
     setData(prev => {
       const stageData = prev[stage][project] || [];
@@ -271,14 +274,27 @@ export const PipelineProvider = ({ children }) => {
       const comment = askReason(message);
       if (comment === null) return false;
       setData(prev => {
-        const duplicated = { ...carryOver(row), id: generateId(), type: 'rework', comments: comment };
-        const archived = (prev[stage][project] || []).map(r => r.id === id ? { ...r, status: 'Archived Rework' } : r);
+        const fromRows = prev[stage][project] || [];
         let next;
         if (toStage === stage) {
-          next = replaceRows(prev, stage, project, [...archived, duplicated]);
+          // Internal rework: archive this row and reopen it for the same artist.
+          const duplicated = { ...carryOver(row), id: generateId(), type: 'rework', comments: comment, artist: row.artist || '' };
+          next = replaceRows(prev, stage, project, [...fromRows.map(r => (r.id === id ? { ...r, status: 'Archived Rework' } : r)), duplicated]);
         } else {
-          next = replaceRows(prev, stage, project, archived);
-          next = replaceRows(next, toStage, project, [...(prev[toStage][project] || []), duplicated]);
+          // As in the sheets: this row becomes "Sent to <stage>", and the asset's latest row upstream is archived
+          // and reopened as a rework row carrying the feedback.
+          const targetRows = prev[toStage][project] || [];
+          let upstream = -1;
+          for (let i = targetRows.length - 1; i >= 0; i--) {
+            if (targetRows[i].tcn === row.tcn) { upstream = i; break; }
+          }
+          const source = upstream >= 0 ? targetRows[upstream] : row;
+          const duplicated = { ...carryOver(source), id: generateId(), type: 'rework', comments: comment };
+          next = replaceRows(prev, stage, project, fromRows.map(r => (r.id === id ? { ...r, status: `Sent to ${toStage}` } : r)));
+          next = replaceRows(next, toStage, project, [
+            ...targetRows.map((r, i) => (i === upstream ? { ...r, status: 'Archived Rework' } : r)),
+            duplicated,
+          ]);
         }
         const text = toStage === stage ? `Internal rework in ${stage}` : `Sent back from ${stage} to ${toStage}`;
         if (comment) next = withAssetComment(next, project, row.tcn, comment);
@@ -460,7 +476,7 @@ export const PipelineProvider = ({ children }) => {
   const projects = Object.keys(data.Manager);
 
   return (
-    <PipelineContext.Provider value={{ data, projects, notice, updateRow, dispatchToModelling, handleStatusChange, addManagerRow, addProject, addComment, resetDemo, setArtistLog, addArtist, updateArtist, renameArtist, removeArtist, setAssetComment }}>
+    <PipelineContext.Provider value={{ data, projects, notice, updateRow, dispatchToModelling, handleStatusChange, addAsset, nextAssetNumber, findAsset, addProject, addComment, resetDemo, setArtistLog, addArtist, updateArtist, renameArtist, removeArtist, setAssetComment }}>
       {children}
     </PipelineContext.Provider>
   );

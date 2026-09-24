@@ -210,7 +210,7 @@ const AssetRecord = ({ project, tcn, onBack }) => {
               const extra = passes.reduce((s, r) => s + hours(r.reworkTime), 0);
               const alloc = passes.reduce((s, r) => s + hours(r.allocTime), 0);
               const scale = Math.max(alloc, spent + extra, 1);
-              const status = snap ? displayStatus(snap.status) : '';
+              const status = snap ? displayStatus(snap.status, st) : '';
               return (
                 <div key={st} className="summary-stage">
                   <div className="summary-top">

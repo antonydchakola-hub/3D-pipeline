@@ -37,12 +37,19 @@ export const SEND_BACK_OPTIONS = {
 };
 
 const ARCHIVED = new Set(['Archived Rework', 'Archived Split']);
-const CLOSED = new Set(['Archived Rework', 'Archived Split', 'Sent to Texturing', 'Sent to Lighting', 'Split Done']);
+const STAGE_ORDER = { Modelling: 0, Texturing: 1, Lighting: 2 };
+
+const sentTo = (status) => (String(status || '').startsWith('Sent to ') ? String(status).slice(8) : null);
+// "Sent to Modelling" on a Texturing or Lighting row means it was sent back, as in the sheets.
+export const isSendBack = (stage, status) => {
+  const target = sentTo(status);
+  return !!target && stage in STAGE_ORDER && target in STAGE_ORDER && STAGE_ORDER[target] < STAGE_ORDER[stage];
+};
 
 export const isArchived = (row) => ARCHIVED.has(row?.status);
-// Rows that already handed off downstream; re-running a transition on them would duplicate the asset.
-export const isLocked = (row) => isArchived(row) || String(row?.status || '').startsWith('Sent to');
-export const isClosed = (row) => CLOSED.has(row?.status);
+// Rows that already handed off; re-running a transition on them would duplicate the asset.
+export const isLocked = (row) => isArchived(row) || !!sentTo(row?.status);
+export const isClosed = (row) => isArchived(row) || !!sentTo(row?.status) || row?.status === 'Split Done';
 export const isOpen = (row) => !isClosed(row) && row?.status !== 'Approved';
 
 export const toISODate = (date) => {
@@ -120,16 +127,18 @@ export const assetComment = (data, project, tcn) => {
   return '';
 };
 
-export const displayStatus = (status) => {
+export const displayStatus = (status, stage) => {
   if (!status) return '';
+  if (isSendBack(stage, status)) return 'Sent back';
   if (status.startsWith('Sent to')) return 'Done';
   if (status === 'Archived Rework') return 'Sent back';
   if (status === 'Archived Split') return 'Split';
   return status;
 };
 
-export const statusTone = (status) => {
+export const statusTone = (status, stage) => {
   if (!status) return 'empty';
+  if (isSendBack(stage, status)) return 'rework';
   if (status === 'Approved') return 'good-solid';
   if (status === 'Done' || status === 'Split Done' || status.startsWith('Sent to')) return 'good';
   if (status.startsWith('Rework') || status === 'Archived Rework' || status === 'Sent back') return 'rework';
@@ -169,6 +178,28 @@ export const assetStage = (data, project, mgrRow) => {
     return { key: pos.stage, label: `Rework · ${pos.stage}`, tone: 'rework', ...pos };
   }
   return { key: pos.stage, label: `In ${pos.stage.toLowerCase()}`, tone: STAGE_TONE[pos.stage], ...pos };
+};
+
+const isSignedOff = (data, project, tcn) => {
+  const pos = currentPosition(data, project, tcn);
+  return pos?.stage === 'Lighting' && pos.row.status === 'Approved';
+};
+
+// An asset is complete once approved; a split asset once every one of its sub-assets is approved.
+export const isAssetComplete = (data, project, mgrRow) => {
+  const stage = assetStage(data, project, mgrRow);
+  if (stage.key === 'approved') return true;
+  if (stage.key !== 'split') return false;
+  const children = new Set(
+    STAGES.flatMap((s) => rowsFor(data, s, project).filter((r) => r.tcn?.startsWith(`${mgrRow.tcin}-`)).map((r) => r.tcn)),
+  );
+  return children.size > 0 && [...children].every((tcn) => isSignedOff(data, project, tcn));
+};
+
+export const projectProgress = (data, project) => {
+  const assets = rowsFor(data, 'Manager', project).filter((r) => r.tcin);
+  const done = assets.filter((r) => isAssetComplete(data, project, r)).length;
+  return { total: assets.length, done, complete: assets.length > 0 && done === assets.length };
 };
 
 export const openRows = (data, stage, project) => rowsFor(data, stage, project).filter(isOpen);
@@ -308,10 +339,11 @@ export const artistUsage = (data, name) => {
   return rows;
 };
 
-// Artist summary definitions — change here if the sheet's formulas count differently.
-export const isCompletedIn = (stage, row) => {
-  if (stage === 'Lighting') return row.status === 'Uploaded' || row.status === 'Approved';
-  return String(row.status || '').startsWith('Sent to') || row.status === 'Split Done';
+// Mirrors the sheets' syncToArtistSheet: a row credits its artist once it is closed by Done, a rework,
+// Split Done, Uploaded or Approved (an uploaded row stays credited once approved; it is not counted twice).
+export const isCreditedRow = (row) => {
+  const s = String(row?.status || '');
+  return s.startsWith('Sent to') || s === 'Archived Rework' || s === 'Split Done' || s === 'Uploaded' || s === 'Approved';
 };
 
 const blankArtist = (artist) => ({
@@ -319,16 +351,14 @@ const blankArtist = (artist) => ({
   completed: 0,
   inProgress: 0,
   byComplexity: Object.fromEntries([...COMPLEXITIES, ''].map((c) => [c, 0])),
-  directUpload: 0,
-  qaDone: 0,
   completedHours: 0,
   timeSpent: 0,
   reworkTime: 0,
   rows: [],
-  models: new Set(),
 });
 
-// A model counts once per artist and stage, however many passes (reworks) it took; hours add up every pass.
+// Same rules as the Artist sheet: models and complexity count only "new" rows; completed hours add the
+// allocated time, time spent adds time spent plus rework time, and rework adds rework time.
 export const artistSummary = (data, projects, stage) => {
   const byArtist = new Map();
   for (const project of projects) {
@@ -336,17 +366,13 @@ export const artistSummary = (data, projects, stage) => {
       if (!row.artist) continue;
       if (!byArtist.has(row.artist)) byArtist.set(row.artist, blankArtist(row.artist));
       const a = byArtist.get(row.artist);
-      const completed = isCompletedIn(stage, row);
-      const modelKey = `${project}\u0000${row.tcn}`;
-      a.rows.push({ project, row, completed });
-      a.timeSpent += hours(row.timeSpent);
-      a.reworkTime += hours(row.reworkTime);
-      if (completed) {
+      const credited = isCreditedRow(row);
+      a.rows.push({ project, row, credited });
+      if (credited) {
         a.completedHours += hours(row.allocTime);
-        if (row.status === 'Uploaded') a.directUpload += 1;
-        if (row.status === 'Approved') a.qaDone += 1;
-        if (!a.models.has(modelKey)) {
-          a.models.add(modelKey);
+        a.timeSpent += hours(row.timeSpent) + hours(row.reworkTime);
+        a.reworkTime += hours(row.reworkTime);
+        if (String(row.type || '').trim().toLowerCase() === 'new') {
           a.completed += 1;
           a.byComplexity[COMPLEXITIES.includes(row.complexity) ? row.complexity : ''] += 1;
         }

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { usePipeline } from './PipelineContext';
 import { ArtistCell, Dash, Icon, Pill, PillSelect } from './ui';
 import {
@@ -24,8 +24,13 @@ const managerRowView = (data, project, row) => {
   };
 };
 
-const ManagerView = ({ project, query, filters, onOpenAsset }) => {
+const ManagerView = ({ project, query, filters, onOpenAsset, highlightId }) => {
   const { data, updateRow, setAssetComment } = usePipeline();
+
+  useEffect(() => {
+    if (!highlightId) return;
+    document.querySelector(`[data-row-id="${highlightId}"]`)?.scrollIntoView({ block: 'center' });
+  }, [highlightId]);
   const today = todayISO();
   const set = (id, field) => (value) => updateRow('Manager', project, id, field, value);
 
@@ -84,7 +89,11 @@ const ManagerView = ({ project, query, filters, onOpenAsset }) => {
             const overdue = isOverdue(dueRow, today);
             const approved = position.key === 'approved';
             return (
-              <tr key={row.id} className={`${row.checked ? 'is-selected' : ''}${approved ? ' is-done' : ''}${overdue ? ' is-overdue' : ''}`}>
+              <tr
+                key={row.id}
+                data-row-id={row.id}
+                className={`${row.checked ? 'is-selected' : ''}${approved ? ' is-done' : ''}${overdue ? ' is-overdue' : ''}${row.id === highlightId ? ' is-new' : ''}`}
+              >
                 <td className="sticky center" style={frozenStyle(0)}>
                   {dispatched ? (
                     <span className="lock" title="Already dispatched to Modelling"><Icon name="lock" size={14} /></span>
@@ -129,7 +138,7 @@ const ManagerView = ({ project, query, filters, onOpenAsset }) => {
                 {STAGES.map((stage) => {
                   const snap = view.stages[stage];
                   const rw = row[REWORK_FIELD[stage]] || 0;
-                  const status = displayStatus(snap?.status);
+                  const status = displayStatus(snap?.status, stage);
                   return (
                     <React.Fragment key={stage}>
                       <td className="col-artist"><ArtistCell name={snap?.artist} /></td>

@@ -62,8 +62,8 @@ const ARTIST_LOG = {
     'R. Menon': { leaves: '0', training: '0', qaHours: '1.5' },
     'L. Ferreira': { leaves: '0', training: '2', qaHours: '0' },
     'S. Thomas': { leaves: '1', training: '0', qaHours: '0' },
-    'K. Tan': { leaves: '0', training: '0', qaHours: '6' },
-    'V. Rao': { leaves: '0', training: '1', qaHours: '3' },
+    'K. Tan': { directUpload: '2', qaDone: '3', leaves: '0', training: '0', qaHours: '6' },
+    'V. Rao': { directUpload: '1', qaDone: '1', leaves: '0', training: '1', qaHours: '3' },
   },
   [-1]: {
     'A. Silva': { leaves: '1', training: '0', qaHours: '0' },
@@ -73,8 +73,8 @@ const ARTIST_LOG = {
     'R. Menon': { leaves: '0', training: '1', qaHours: '2' },
     'L. Ferreira': { leaves: '0.5', training: '0', qaHours: '0' },
     'S. Thomas': { leaves: '0', training: '2', qaHours: '0' },
-    'K. Tan': { leaves: '0', training: '0', qaHours: '8' },
-    'V. Rao': { leaves: '1', training: '0', qaHours: '2.5' },
+    'K. Tan': { directUpload: '3', qaDone: '4', leaves: '0', training: '0', qaHours: '8' },
+    'V. Rao': { directUpload: '1', qaDone: '2', leaves: '1', training: '0', qaHours: '2.5' },
   },
 };
 
@@ -271,8 +271,16 @@ export const buildDemoProject = (today = todayISO()) => {
         });
       } else if (op === 'rework') {
         const [from, to, comment] = args;
-        openRow(from).status = 'Archived Rework';
-        sentBackRows.add(newRow(to, 'rework', { comments: comment }).id);
+        const current = openRow(from);
+        if (to === from) {
+          current.status = 'Archived Rework';
+          sentBackRows.add(newRow(to, 'rework', { comments: comment, artist: current.artist }).id);
+        } else {
+          current.status = `Sent to ${to}`;
+          const upstream = out[to].filter((r) => r.tcn === asset.tcin).pop();
+          if (upstream) upstream.status = 'Archived Rework';
+          sentBackRows.add(newRow(to, 'rework', { comments: comment }).id);
+        }
         mgr[COUNTER[to]] += 1;
         if (from === 'Texturing' && to === 'Modelling') mgr.textStatus = '';
         if (from === 'Lighting') {

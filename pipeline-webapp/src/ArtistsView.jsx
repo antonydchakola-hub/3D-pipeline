@@ -5,6 +5,8 @@ import { COMPLEXITIES, artistSummary, displayStatus, formatHours, hours, matches
 
 const COMPLEXITY_COLS = [...COMPLEXITIES.map((c) => ({ key: c, label: c })), { key: '', label: 'Not set' }];
 const LOG_FIELDS = [
+  { key: 'directUpload', label: 'Direct upload', unit: '' },
+  { key: 'qaDone', label: 'QA done', unit: '' },
   { key: 'leaves', label: 'Leaves', unit: 'days' },
   { key: 'training', label: 'Training', unit: 'h' },
   { key: 'qaHours', label: 'QA', unit: 'h' },
@@ -32,27 +34,24 @@ const ArtistsView = ({ stage, projects, week, query, onOpenAsset }) => {
   const [sort, setSort] = useState('completed');
   const [expanded, setExpanded] = useState(null);
 
-  const lighting = stage === 'Lighting';
   const log = data.artistLog?.[week] || {};
   const summary = artistSummary(data, projects, stage);
   const rows = summary.filter((a) => matchesQuery(query, a.artist)).sort(SORTS[sort]);
 
   const totals = rows.reduce((t, a) => ({
     completed: t.completed + a.completed,
-    directUpload: t.directUpload + a.directUpload,
-    qaDone: t.qaDone + a.qaDone,
     completedHours: t.completedHours + a.completedHours,
     timeSpent: t.timeSpent + a.timeSpent,
     reworkTime: t.reworkTime + a.reworkTime,
     byComplexity: Object.fromEntries(COMPLEXITY_COLS.map((c) => [c.key, t.byComplexity[c.key] + a.byComplexity[c.key]])),
     log: Object.fromEntries(LOG_FIELDS.map((f) => [f.key, t.log[f.key] + hours(log[a.artist]?.[f.key])])),
   }), {
-    completed: 0, directUpload: 0, qaDone: 0, completedHours: 0, timeSpent: 0, reworkTime: 0,
+    completed: 0, completedHours: 0, timeSpent: 0, reworkTime: 0,
     byComplexity: Object.fromEntries(COMPLEXITY_COLS.map((c) => [c.key, 0])),
     log: Object.fromEntries(LOG_FIELDS.map((f) => [f.key, 0])),
   });
 
-  const colCount = 1 + 1 + COMPLEXITY_COLS.length + (lighting ? 2 : 0) + 3 + LOG_FIELDS.length;
+  const colCount = 1 + 1 + COMPLEXITY_COLS.length + 3 + LOG_FIELDS.length;
 
   if (!summary.length) {
     return <div className="empty-state"><Icon name="user" size={28} stroke={1.4} />No artists have been assigned work in {stage} yet.</div>;
@@ -65,7 +64,6 @@ const ArtistsView = ({ stage, projects, week, query, onOpenAsset }) => {
           <tr className="band">
             <th className="sticky edge" style={{ left: 0 }} colSpan={2}><span className="band-label">Artist</span></th>
             <th colSpan={COMPLEXITY_COLS.length} className="band-overall"><span className="band-label">Completed by complexity</span></th>
-            {lighting && <th colSpan={2} className="band-light"><span className="band-label">Lighting / QA</span></th>}
             <th colSpan={3} className="band-mod"><span className="band-label">Hours</span></th>
             <th colSpan={LOG_FIELDS.length} className="band-log"><span className="band-label">Selected week · entered by hand</span></th>
           </tr>
@@ -73,7 +71,6 @@ const ArtistsView = ({ stage, projects, week, query, onOpenAsset }) => {
             <SortTh id="artist" sort={sort} onSort={setSort} className="sticky col-person" style={{ left: 0 }}>Artist</SortTh>
             <SortTh id="completed" sort={sort} onSort={setSort} className="sticky edge col-count" style={{ left: 260 }}>Completed</SortTh>
             {COMPLEXITY_COLS.map((c) => <th key={c.label} className="col-count">{c.label}</th>)}
-            {lighting && <><th className="col-count" title="Uploaded, waiting for QA">Direct upload</th><th className="col-count" title="Approved in QA">QA done</th></>}
             <SortTh id="completedHours" sort={sort} onSort={setSort} className="col-hours">Completed h</SortTh>
             <SortTh id="timeSpent" sort={sort} onSort={setSort} className="col-hours">Time spent</SortTh>
             <SortTh id="reworkTime" sort={sort} onSort={setSort} className="col-hours">Rework</SortTh>
@@ -99,7 +96,6 @@ const ArtistsView = ({ stage, projects, week, query, onOpenAsset }) => {
                   {COMPLEXITY_COLS.map((c) => (
                     <td key={c.label} className={`col-count${c.key === '' ? ' is-unset' : ''}`}><Count value={a.byComplexity[c.key]} /></td>
                   ))}
-                  {lighting && <><td className="col-count"><Count value={a.directUpload} /></td><td className="col-count"><Count value={a.qaDone} /></td></>}
                   <td className="col-hours"><Hours value={a.completedHours} /></td>
                   <td className="col-hours"><Hours value={a.timeSpent} /></td>
                   <td className={`col-hours${a.reworkTime ? ' is-rework' : ''}`}><Hours value={a.reworkTime} /></td>
@@ -138,7 +134,7 @@ const ArtistsView = ({ stage, projects, week, query, onOpenAsset }) => {
                                   {projects.length > 1 && <td className="muted">{project}</td>}
                                   <td>{row.type || '—'}</td>
                                   <td>{row.complexity || <span className="muted">Not set</span>}</td>
-                                  <td>{row.status ? <Pill tone={statusTone(row.status)}>{displayStatus(row.status)}</Pill> : <Pill tone="mod">In progress</Pill>}</td>
+                                  <td>{row.status ? <Pill tone={statusTone(row.status, stage)}>{displayStatus(row.status, stage)}</Pill> : <Pill tone="mod">In progress</Pill>}</td>
                                   <td className="r num">{row.allocTime || '—'}</td>
                                   <td className="r num">{row.timeSpent || '—'}</td>
                                   <td className="r num">{row.reworkTime || '—'}</td>
@@ -159,7 +155,6 @@ const ArtistsView = ({ stage, projects, week, query, onOpenAsset }) => {
               <td className="sticky col-person" style={{ left: 0 }}><span className="totals-label">Total · {rows.length} artists</span></td>
               <td className="sticky edge col-count" style={{ left: 260 }}><Count value={totals.completed} /></td>
               {COMPLEXITY_COLS.map((c) => <td key={c.label} className="col-count"><Count value={totals.byComplexity[c.key]} /></td>)}
-              {lighting && <><td className="col-count"><Count value={totals.directUpload} /></td><td className="col-count"><Count value={totals.qaDone} /></td></>}
               <td className="col-hours"><Hours value={totals.completedHours} /></td>
               <td className="col-hours"><Hours value={totals.timeSpent} /></td>
               <td className="col-hours"><Hours value={totals.reworkTime} /></td>
