@@ -1,108 +1,227 @@
 import React, { useState } from 'react';
 import ManagerView from './ManagerView';
 import ProductionView from './ProductionView';
+import ConsoleView from './ConsoleView';
+import AssetRecord from './AssetRecord';
+import ArtistsView from './ArtistsView';
+import StageStrip from './StageStrip';
 import { PipelineProvider, usePipeline } from './PipelineContext';
-import './index.css';
+import { Icon } from './ui';
+import { DEMO_PROJECT } from './mockData';
+import {
+  ARTISTS, PRIORITIES, STAGES, STAGE_LABEL, addDays, formatDate, priorityShort, rowsFor, stageHealth, todayISO, weekStart,
+} from './pipelineModel';
+
+const ALL_PROJECTS = '__all__';
+
+const TopBar = ({ projects, project, onProject, onAddProject, onResetDemo, query, onQuery }) => (
+  <header className="topbar">
+    <div className="brand">
+      <span className="brand-mark"><Icon name="cube" size={17} stroke={1.6} /></span>
+      <span className="brand-name">3D Model Pipeline</span>
+    </div>
+    <span className="divider" />
+    <label className="project-switch">
+      <span className="eyebrow">Project</span>
+      <select value={project} onChange={(e) => onProject(e.target.value)} aria-label="Project">
+        {projects.map((p) => <option key={p} value={p}>{p}</option>)}
+      </select>
+      <Icon name="chevronDown" size={14} />
+    </label>
+    <button type="button" className="icon-btn" onClick={onAddProject} title="New project" aria-label="New project">
+      <Icon name="plus" size={16} stroke={2} />
+    </button>
+    {project === DEMO_PROJECT && (
+      <button type="button" className="btn btn-ghost btn-small" onClick={onResetDemo} title="Replace the Demo project with fresh sample data dated around today">
+        Reset demo
+      </button>
+    )}
+    <div className="spacer" />
+    <label className="search">
+      <Icon name="search" size={15} />
+      <input value={query} onChange={(e) => onQuery(e.target.value)} placeholder="Search TCIN, artist, comment…" aria-label="Search" />
+      {query && (
+        <button type="button" className="search-clear" onClick={() => onQuery('')} aria-label="Clear search"><Icon name="close" size={13} stroke={2} /></button>
+      )}
+    </label>
+  </header>
+);
+
+const FilterSelect = ({ label, value, options, format = (v) => v, onChange }) => (
+  <label className={`filter${value ? ' is-set' : ''}`}>
+    {!value && <Icon name="filter" size={13} />}
+    <span className="filter-label">{label}{value ? ':' : ''}</span>
+    <select value={value} onChange={(e) => onChange(e.target.value)} aria-label={label}>
+      <option value="">Any</option>
+      {options.map((o) => <option key={o} value={o}>{format(o)}</option>)}
+    </select>
+    {value ? (
+      <button type="button" className="filter-clear" onClick={() => onChange('')} aria-label={`Clear ${label} filter`}><Icon name="close" size={12} stroke={2.2} /></button>
+    ) : (
+      <Icon name="chevronDown" size={12} />
+    )}
+  </label>
+);
 
 const MainApp = () => {
-  const { data, projects, addProject } = usePipeline();
-  const [activeTab, setActiveTab] = useState('Manager');
-  const [activeProject, setActiveProject] = useState('Testing');
+  const { data, projects, notice, addProject, addManagerRow, dispatchToModelling, resetDemo } = usePipeline();
+  const [project, setProject] = useState(projects.includes(DEMO_PROJECT) ? DEMO_PROJECT : projects[0]);
+  const [mode, setMode] = useState('grid');
+  const [stage, setStage] = useState('Manager');
+  const [asset, setAsset] = useState(null);
+  const [query, setQuery] = useState('');
+  const [filters, setFilters] = useState({ priority: '', artist: '' });
+  const [artistStage, setArtistStage] = useState('Modelling');
+  const [artistScope, setArtistScope] = useState(ALL_PROJECTS);
+  const [week, setWeek] = useState(() => weekStart(todayISO()));
 
-  const tabs = ['Manager', 'Modelling', 'Texturing', 'Lighting'];
+  const activeProject = projects.includes(project) ? project : projects[0];
+  const health = stageHealth(data, activeProject);
+  const managerRows = rowsFor(data, 'Manager', activeProject);
+  const selected = managerRows.filter((r) => r.checked && r.tcin).length;
+  const stageRows = stage === 'Manager' ? managerRows : rowsFor(data, stage, activeProject);
+  const artists = [...new Set([...ARTISTS, ...STAGES.flatMap((s) => rowsFor(data, s, activeProject).map((r) => r.artist)).filter(Boolean)])];
 
-  const getTabCount = (tabName) => {
-    return (data[tabName] && data[tabName][activeProject]) ? data[tabName][activeProject].length : 0;
+  const openAsset = (tcn, inProject) => {
+    if (!tcn) return;
+    if (inProject && inProject !== activeProject) setProject(inProject);
+    setAsset(tcn);
   };
 
-  const renderContent = () => {
-    switch (activeTab) {
-      case 'Manager':
-        return <ManagerView activeProject={activeProject} />;
-      case 'Modelling':
-        return <ProductionView stageName="Modelling" activeProject={activeProject} />;
-      case 'Texturing':
-        return <ProductionView stageName="Texturing" activeProject={activeProject} />;
-      case 'Lighting':
-        return <ProductionView stageName="Lighting" activeProject={activeProject} />;
-      default:
-        return <ManagerView activeProject={activeProject} />;
+  const selectStage = (next) => {
+    setAsset(null);
+    if (mode === 'artists' && next !== 'Manager') {
+      setArtistStage(next);
+      return;
     }
+    setStage(next);
+    setMode('grid');
   };
+
+  const thisWeek = weekStart(todayISO());
+  const artistProjects = artistScope === ALL_PROJECTS ? projects : [artistScope].filter((p) => projects.includes(p));
+  const stripActive = mode === 'grid' ? stage : mode === 'artists' ? artistStage : null;
 
   const handleAddProject = () => {
-    const name = window.prompt("Enter new Project name:");
+    const name = window.prompt('Enter new Project name:');
     if (name && name.trim()) {
       addProject(name.trim());
-      setActiveProject(name.trim());
+      setProject(name.trim());
+      setAsset(null);
     }
   };
 
+  const changeProject = (next) => {
+    setProject(next);
+    setAsset(null);
+  };
+
+  let content;
+  if (asset) {
+    content = <AssetRecord key={`${activeProject}:${asset}`} project={activeProject} tcn={asset} onBack={() => setAsset(null)} />;
+  } else if (mode === 'console') {
+    content = <ConsoleView project={activeProject} />;
+  } else if (mode === 'artists') {
+    content = <ArtistsView stage={artistStage} projects={artistProjects} week={week} query={query} onOpenAsset={openAsset} />;
+  } else if (stage === 'Manager') {
+    content = <ManagerView project={activeProject} query={query} filters={filters} onOpenAsset={openAsset} />;
+  } else {
+    content = <ProductionView stageName={stage} project={activeProject} query={query} filters={filters} onOpenAsset={openAsset} />;
+  }
+
   return (
-    <div className="app-container">
-      <header className="app-header">
-        <div className="header-left">
-          <h1>3D Model Pipeline</h1>
-          <nav className="top-tab-navigation">
-            {tabs.map((tab) => (
-              <div 
-                key={tab} 
-                className={`top-tab-wrapper ${activeTab === tab ? 'active' : ''}`}
-                onClick={() => setActiveTab(tab)}
-              >
-                <div className="top-tab-content">
-                  {tab} <span className="tab-badge">{getTabCount(tab)}</span>
-                </div>
-              </div>
-            ))}
-          </nav>
-        </div>
-        
-        <div className="header-right">
-          <div className="search-bar">
-            <span className="search-icon">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-            </span>
-            <input type="text" placeholder="Search by ID, Artist, TCIN..." />
-          </div>
-          <button className="icon-button">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
-          </button>
-          <div className="user-profile">
-            <div className="avatar">JD</div>
-            <span className="dropdown-arrow">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
-            </span>
-          </div>
-        </div>
-      </header>
-      
-      <main className="glass-panel main-panel">
-        <div className="tab-content">
-          {renderContent()}
-        </div>
-        
-        <footer className="project-navigation">
-          <div className="project-tabs-container">
-            {projects.map(proj => (
-              <button 
-                key={proj} 
-                className={`project-tab ${activeProject === proj ? 'active' : ''}`}
-                onClick={() => setActiveProject(proj)}
-              >
-                {proj}
+    <div className="app">
+      <TopBar projects={projects} project={activeProject} onProject={changeProject} onAddProject={handleAddProject} onResetDemo={() => { setAsset(null); resetDemo(); }} query={query} onQuery={setQuery} />
+
+      {!asset && (
+        <>
+          <StageStrip health={health} active={stripActive} onSelect={selectStage} />
+
+          <div className="commandbar">
+            <div className="segmented" role="tablist" aria-label="View">
+              <button type="button" role="tab" aria-selected={mode === 'grid'} className={mode === 'grid' ? 'is-active' : ''} onClick={() => setMode('grid')}>
+                <Icon name="grid" size={14} />Grid
               </button>
-            ))}
-            <button 
-              className="project-tab add-project-btn" 
-              onClick={handleAddProject}
-              title="Add New Project"
-            >
-              +
-            </button>
+              <button type="button" role="tab" aria-selected={mode === 'console'} className={mode === 'console' ? 'is-active' : ''} onClick={() => setMode('console')}>
+                <Icon name="chart" size={14} />Console
+              </button>
+              <button type="button" role="tab" aria-selected={mode === 'artists'} className={mode === 'artists' ? 'is-active' : ''} onClick={() => setMode('artists')}>
+                <Icon name="user" size={14} />Artists
+              </button>
+            </div>
+
+            {mode === 'artists' && (
+              <>
+                <span className="divider" />
+                <div className="segmented" role="tablist" aria-label="Artist summary stage">
+                  {STAGES.map((s) => (
+                    <button key={s} type="button" role="tab" aria-selected={artistStage === s} className={artistStage === s ? 'is-active' : ''} onClick={() => setArtistStage(s)}>
+                      {STAGE_LABEL[s]}
+                    </button>
+                  ))}
+                </div>
+                <FilterSelect label="Project" value={artistScope === ALL_PROJECTS ? '' : artistScope} options={projects} onChange={(v) => setArtistScope(v || ALL_PROJECTS)} />
+                <div className="spacer" />
+                <div className="week-nav" aria-label="Week for leaves, training and QA hours">
+                  <button type="button" className="icon-btn" onClick={() => setWeek((w) => addDays(w, -7))} aria-label="Previous week"><Icon name="chevronLeft" size={15} stroke={2} /></button>
+                  <span className="week-label">
+                    <span className="eyebrow">Week of</span>
+                    <span className="num">{formatDate(week)}</span>
+                  </span>
+                  <button type="button" className="icon-btn" onClick={() => setWeek((w) => addDays(w, 7))} disabled={week >= thisWeek} aria-label="Next week"><Icon name="chevronRight" size={15} stroke={2} /></button>
+                  {week !== thisWeek && <button type="button" className="btn btn-ghost btn-small" onClick={() => setWeek(thisWeek)}>This week</button>}
+                </div>
+              </>
+            )}
+
+            {mode === 'grid' && (
+              <>
+                <span className="divider" />
+                <FilterSelect label="Priority" value={filters.priority} options={PRIORITIES} format={priorityShort} onChange={(v) => setFilters((f) => ({ ...f, priority: v }))} />
+                <FilterSelect label="Artist" value={filters.artist} options={artists} onChange={(v) => setFilters((f) => ({ ...f, artist: v }))} />
+              </>
+            )}
+            {mode === 'console' && <span className="commandbar-note">Live from {activeProject} — every figure is computed from the stage sheets.</span>}
+
+            <div className="spacer" />
+
+            {mode === 'grid' && stage === 'Manager' && (
+              <>
+                {selected > 0 && <span className="selection"><strong className="num">{selected}</strong> selected</span>}
+                <button type="button" className="btn btn-brand" onClick={() => dispatchToModelling(activeProject)} disabled={!selected}>
+                  Dispatch to Modelling<Icon name="arrowRight" size={15} stroke={2.1} />
+                </button>
+                <button type="button" className="btn btn-ghost" onClick={() => addManagerRow(activeProject)}>
+                  <Icon name="plus" size={14} stroke={2.1} />Add asset
+                </button>
+              </>
+            )}
           </div>
+        </>
+      )}
+
+      <main className="main">{content}</main>
+
+      {!asset && mode === 'grid' && (
+        <footer className="statusbar">
+          <span><strong className="num">{stageRows.length}</strong> {stage === 'Manager' ? 'assets' : `rows in ${STAGE_LABEL[stage]}`}</span>
+          {stage === 'Manager' && selected > 0 && <span><strong className="num">{selected}</strong> selected</span>}
+          {(query || filters.priority || filters.artist) && <span>Filtered</span>}
+          <div className="spacer" />
+          <span className="saved"><span className="saved-dot" />Saved in this browser</span>
         </footer>
-      </main>
+      )}
+
+      {!asset && mode === 'artists' && (
+        <footer className="statusbar">
+          <span>{STAGE_LABEL[artistStage]} · running totals across {artistScope === ALL_PROJECTS ? `all ${projects.length} projects` : artistScope}</span>
+          <span>Leaves, training and QA hours are for the week of {formatDate(week)}</span>
+          <div className="spacer" />
+          <span className="saved"><span className="saved-dot" />Saved in this browser</span>
+        </footer>
+      )}
+
+      {notice && <div className="toast" role="status"><Icon name="check" size={15} stroke={2.4} />{notice}</div>}
     </div>
   );
 };

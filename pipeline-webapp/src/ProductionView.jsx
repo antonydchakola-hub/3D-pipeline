@@ -1,90 +1,126 @@
 import React from 'react';
-import DropdownCell from './DropdownCell';
 import { usePipeline } from './PipelineContext';
+import { Avatar, Icon, Pill, PillSelect } from './ui';
+import {
+  ARTISTS, COMPLEXITIES, PRIORITIES, STAGE_TONE, STATUS_OPTIONS, TYPES,
+  displayStatus, formatHours, hours, isArchived, isLocked, isOverdue, matchesQuery,
+  priorityShort, priorityTone, rowsFor, statusTone, todayISO, typeTone,
+} from './pipelineModel';
 
-const typeOptions = ['new', 'rework'];
-const priorityOptions = ['High Priority', 'Medium Priority', 'Low Priority'];
-const complexityOptions = ['Very Simple', 'Simple', 'Medium', 'Hard', 'Very Hard'];
-const artistOptions = ['Test', 'Artist A', 'Artist B'];
-// Status options change based on the stage
-const getStatusOptions = (stage) => {
-  const MOD_STATUSES = [
-    'Done', 'Rework', 'Split', 'Split Done'
-  ];
-  const TEX_STATUSES = [
-    'Done', 'Rework (Modelling)', 'Rework (Texturing)', 'Split', 'Split Done'
-  ];
-  const LIGHT_STATUSES = [
-    'Uploaded', 'Approved', 'Rework (Modelling)', 'Rework (Texturing)', 'Rework (Lighting)', 'Split', 'Split Done'
-  ];
-  if (stage === 'Modelling') return MOD_STATUSES;
-  if (stage === 'Texturing') return TEX_STATUSES;
-  if (stage === 'Lighting') return LIGHT_STATUSES;
-  return [];
+const FROZEN = [
+  { width: 56, left: 0 },
+  { width: 156, left: 56 },
+];
+const frozenStyle = (i) => ({ left: FROZEN[i].left, width: FROZEN[i].width, minWidth: FROZEN[i].width });
+
+const TimeCell = ({ row, disabled, onChange, tone }) => {
+  const alloc = hours(row.allocTime);
+  const spent = hours(row.timeSpent);
+  const over = alloc > 0 && spent > alloc;
+  const pct = alloc > 0 ? Math.min(100, (spent / alloc) * 100) : 0;
+  return (
+    <div className="time-cell">
+      <input className="cell-input num" value={row.timeSpent || ''} disabled={disabled} onChange={(e) => onChange(e.target.value)} aria-label="Time spent" inputMode="decimal" />
+      {alloc > 0 && (
+        <div className={`time-track${over ? ' is-over' : ''}`} title={`${formatHours(spent)} of ${formatHours(alloc)} h`}>
+          <span className={`time-fill tone-${over ? 'danger' : tone}`} style={{ width: `${over ? 100 : pct}%` }} />
+        </div>
+      )}
+    </div>
+  );
 };
 
-const ProductionView = ({ stageName, activeProject }) => {
+const ProductionView = ({ stageName, project, query, filters, onOpenAsset }) => {
   const { data, updateRow, handleStatusChange } = usePipeline();
-  const projectData = data[stageName][activeProject] || [];
-  
-  const statusOptions = getStatusOptions(stageName);
+  const today = todayISO();
+  const tone = STAGE_TONE[stageName];
+  const all = rowsFor(data, stageName, project);
+  const set = (id, field) => (value) => updateRow(stageName, project, id, field, value);
+
+  const artistOptions = [...new Set([...ARTISTS, ...all.map((r) => r.artist).filter(Boolean)])];
+
+  const rows = all.filter((row) => {
+    if (filters.priority && row.priority !== filters.priority) return false;
+    if (filters.artist && row.artist !== filters.artist) return false;
+    return matchesQuery(query, row.tcn, row.no, row.artist, row.comments);
+  });
+
+  if (!all.length) {
+    return <div className="empty-state"><Icon name="cube" size={28} stroke={1.4} />Nothing in {stageName} for this project yet.</div>;
+  }
 
   return (
-    <div className="table-wrapper">
-      <div className="stage-header">
-        <h2>{stageName} Stage - {activeProject}</h2>
-      </div>
-      <table className="pipeline-table">
+    <div className="grid-scroll">
+      <table className="grid">
         <thead>
-          <tr>
-            <th>No</th>
-            <th>TCN</th>
-            <th>Comments</th>
+          <tr className="cols">
+            <th className="sticky" style={frozenStyle(0)}>No</th>
+            <th className="sticky edge" style={frozenStyle(1)}>TCN</th>
+            <th className="col-comment">Comments</th>
             <th>Type</th>
             <th>Priority</th>
             <th>Complexity</th>
-            <th>Allotment Date</th>
-            <th>Due Date</th>
-            <th>Artist</th>
-            <th>Status</th>
-            <th>Allocated Time</th>
-            <th>Time Spent</th>
-            <th>Rework Time</th>
+            <th className="col-date">Allotted</th>
+            <th className="col-date">Due</th>
+            <th className="col-artist">Artist</th>
+            <th className="col-status">Status</th>
+            <th className="col-num">Alloc h</th>
+            <th className="col-num">Spent h</th>
+            <th className="col-num">Rework h</th>
           </tr>
         </thead>
         <tbody>
-          {projectData.length === 0 ? (
-            <tr><td colSpan="13" style={{textAlign:'center', padding: '2rem', color: '#718096'}}>No assets in this project.</td></tr>
-          ) : (
-            projectData.map((row) => {
-              const isArchived = row.status && row.status === 'Archived Rework';
-              const rowStyle = isArchived ? { opacity: 0.5, backgroundColor: '#f7fafc' } : {};
-              
-              return (
-                <tr key={row.id} style={rowStyle}>
-                  <td style={{ fontWeight: row.no ? 'bold' : 'normal', color: '#4a5568' }}>{row.no}</td>
-                  <td><input type="text" value={row.tcn || ''} onChange={(e) => updateRow(stageName, activeProject, row.id, 'tcn', e.target.value)} className="table-input" disabled={isArchived || !row.isSplit} style={{ fontFamily: 'monospace', fontSize: '0.95rem', cursor: (isArchived || !row.isSplit) ? 'not-allowed' : 'text' }} /></td>
-                  <td><input type="text" value={row.comments || ''} onChange={(e) => updateRow(stageName, activeProject, row.id, 'comments', e.target.value)} className="table-input" disabled={isArchived} /></td>
-                  <td><DropdownCell options={typeOptions} value={row.type} onChange={(v) => updateRow(stageName, activeProject, row.id, 'type', v)} /></td>
-                  <td><DropdownCell options={priorityOptions} value={row.priority} onChange={(v) => updateRow(stageName, activeProject, row.id, 'priority', v)} /></td>
-                  <td><DropdownCell options={complexityOptions} value={row.complexity} onChange={(v) => updateRow(stageName, activeProject, row.id, 'complexity', v)} /></td>
-                  <td><input type="date" value={row.allotDate || ''} onChange={(e) => updateRow(stageName, activeProject, row.id, 'allotDate', e.target.value)} className="table-input date-input" disabled={isArchived} /></td>
-                  <td><input type="date" value={row.dueDate || ''} onChange={(e) => updateRow(stageName, activeProject, row.id, 'dueDate', e.target.value)} className="table-input date-input" disabled={isArchived} /></td>
-                  <td><DropdownCell options={artistOptions} value={row.artist} onChange={(v) => updateRow(stageName, activeProject, row.id, 'artist', v)} /></td>
-                  <td>
-                    {isArchived ? (
-                      <span className="archived-status">{row.status}</span>
-                    ) : (
-                      <DropdownCell options={statusOptions} value={row.status} onChange={(v) => handleStatusChange(stageName, activeProject, row.id, v)} />
-                    )}
-                  </td>
-                  <td style={{ textAlign: 'center' }}><input type="text" value={row.allocTime || ''} onChange={(e) => updateRow(stageName, activeProject, row.id, 'allocTime', e.target.value)} className="table-input num-input" disabled={isArchived} /></td>
-                  <td style={{ textAlign: 'center' }}><input type="text" value={row.timeSpent || ''} onChange={(e) => updateRow(stageName, activeProject, row.id, 'timeSpent', e.target.value)} className="table-input num-input" disabled={isArchived} /></td>
-                  <td style={{ textAlign: 'center' }}><input type="text" value={row.reworkTime || ''} onChange={(e) => updateRow(stageName, activeProject, row.id, 'reworkTime', e.target.value)} className="table-input num-input" disabled={isArchived} /></td>
-                </tr>
-              );
-            })
+          {rows.length === 0 && (
+            <tr><td colSpan={13} className="no-match">No rows match the current search or filters.</td></tr>
           )}
+          {rows.map((row) => {
+            const locked = isLocked(row);
+            const overdue = isOverdue(row, today);
+            const rework = row.type === 'rework' && !locked;
+            return (
+              <tr key={row.id} className={`${locked ? 'is-archived' : ''}${overdue ? ' is-overdue' : ''}${rework ? ' is-rework' : ''}`}>
+                <td className="sticky" style={frozenStyle(0)}><span className="mono muted">{row.no}</span></td>
+                <td className="sticky edge" style={frozenStyle(1)}>
+                  {row.isSplit && !locked ? (
+                    <input className="cell-input mono strong" value={row.tcn || ''} onChange={(e) => set(row.id, 'tcn')(e.target.value)} aria-label="TCN" />
+                  ) : (
+                    <button type="button" className="tcin-link" onClick={() => onOpenAsset(row.tcn)} aria-label={`Open asset record for ${row.tcn}`}>
+                      {row.tcn}<Icon name="chevronRight" size={13} stroke={2} />
+                    </button>
+                  )}
+                </td>
+                <td className="col-comment">
+                  <input className={`cell-input${rework && row.comments ? ' is-feedback' : ''}`} value={row.comments || ''} disabled={locked} placeholder={locked ? '' : 'Add a note'} onChange={(e) => set(row.id, 'comments')(e.target.value)} aria-label="Comments" />
+                </td>
+                <td><PillSelect options={TYPES} value={row.type} onChange={set(row.id, 'type')} tone={typeTone(row.type)} disabled={locked} placeholder="Type" label="Type" /></td>
+                <td><PillSelect options={PRIORITIES} value={row.priority} onChange={set(row.id, 'priority')} tone={priorityTone(row.priority)} format={priorityShort} disabled={locked} placeholder="Priority" label="Priority" /></td>
+                <td><PillSelect options={COMPLEXITIES} value={row.complexity} onChange={set(row.id, 'complexity')} tone="neutral" disabled={locked} placeholder="Complexity" label="Complexity" /></td>
+                <td className="col-date"><input type="date" className="cell-input date" value={row.allotDate || ''} disabled={locked} onChange={(e) => set(row.id, 'allotDate')(e.target.value)} aria-label="Allotment date" /></td>
+                <td className="col-date">
+                  <div className={`date-wrap${overdue ? ' is-late' : ''}`}>
+                    {overdue && <Icon name="alert" size={13} stroke={2} />}
+                    <input type="date" className="cell-input date" value={row.dueDate || ''} disabled={locked} onChange={(e) => set(row.id, 'dueDate')(e.target.value)} aria-label="Due date" />
+                  </div>
+                </td>
+                <td className="col-artist">
+                  <div className="artist-select">
+                    <Avatar name={row.artist} />
+                    <PillSelect options={artistOptions} value={row.artist} onChange={set(row.id, 'artist')} tone="plain" disabled={locked} placeholder="Assign" label="Artist" />
+                  </div>
+                </td>
+                <td className="col-status">
+                  {locked ? (
+                    <Pill tone={statusTone(row.status)} icon={isArchived(row) ? 'rework' : 'check'} title={row.status}>{isArchived(row) ? row.status : displayStatus(row.status)}</Pill>
+                  ) : (
+                    <PillSelect options={STATUS_OPTIONS[stageName]} value={row.status} onChange={(v) => handleStatusChange(stageName, project, row.id, v)} tone={statusTone(row.status)} placeholder="In progress" label="Status" />
+                  )}
+                </td>
+                <td className="col-num"><input className="cell-input num" value={row.allocTime || ''} disabled={locked} onChange={(e) => set(row.id, 'allocTime')(e.target.value)} aria-label="Allocated time" inputMode="decimal" /></td>
+                <td className="col-num"><TimeCell row={row} disabled={locked} onChange={set(row.id, 'timeSpent')} tone={tone} /></td>
+                <td className="col-num"><input className="cell-input num" value={row.reworkTime || ''} disabled={locked} onChange={(e) => set(row.id, 'reworkTime')(e.target.value)} aria-label="Rework time" inputMode="decimal" /></td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
