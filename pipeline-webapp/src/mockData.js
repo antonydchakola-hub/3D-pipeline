@@ -6,76 +6,184 @@ const NEXT = { Modelling: 'Texturing', Texturing: 'Lighting' };
 const COUNTER = { Modelling: 'modRework', Texturing: 'textRework', Lighting: 'lightRework' };
 const MGR_ARTIST = { Modelling: 'modArtist', Texturing: 'textArtist', Lighting: 'qaArtist' };
 
-// Each asset's history, replayed through the same rules the app applies.
-// Ops: [dayOffset, op, ...args]; day 0 is today.
-// Older assets that went straight through (some with one send-back); they give the artist summary its history.
-const HISTORY = [
-  { tcin: '95052710', priority: 'High Priority', complexity: 'Hard', start: -44, mod: ['A. Silva', 10, 11], tex: ['R. Menon', 8, 7], light: ['K. Tan', 4, 3.5] },
-  { tcin: '95052734', priority: 'Medium Priority', complexity: 'Medium', start: -42, mod: ['J. Park', 8, 7.5], tex: ['L. Ferreira', 6, 6], light: ['K. Tan', 3, 3] },
-  { tcin: '95052751', priority: 'Low Priority', complexity: 'Very Simple', start: -40, mod: ['D. Nair', 3, 2.5], tex: ['S. Thomas', 2, 2], light: ['V. Rao', 1.5, 1] },
-  {
-    tcin: '95052768', priority: 'Medium Priority', complexity: 'Simple', start: -38, mod: ['M. Oyelaran', 5, 4], tex: ['R. Menon', 4, 4.5], light: ['K. Tan', 2, 2],
-    sendBack: 'Modelling', comment: 'Handle proportions are off against the reference photo — the handle should be about 10% thicker.',
-  },
-  { tcin: '95052790', priority: 'High Priority', complexity: 'Very Hard', start: -36, mod: ['A. Silva', 14, 16], tex: ['S. Thomas', 10, 9], light: ['K. Tan', 5, 5] },
-  { tcin: '95052815', priority: 'Medium Priority', complexity: 'Medium', start: -33, mod: ['D. Nair', 8, 8.5], tex: ['L. Ferreira', 6, 5.5], light: ['V. Rao', 3, 2.5] },
-  { tcin: '95052832', priority: 'Low Priority', complexity: 'Simple', start: -31, mod: ['J. Park', 5, 4.5], tex: ['R. Menon', 4, 3.5], light: ['K. Tan', 2, 2] },
-  {
-    tcin: '95052857', priority: 'High Priority', complexity: 'Hard', start: -29, mod: ['M. Oyelaran', 10, 9.5], tex: ['S. Thomas', 8, 8], light: ['K. Tan', 4, 4],
-    sendBack: 'Texturing', comment: 'Fabric weave tiles visibly across the seat cushion — needs a larger texture or a break-up mask.',
-  },
-  { tcin: '95052874', priority: 'Medium Priority', complexity: 'Simple', start: -26, mod: ['D. Nair', 5, 5], tex: ['L. Ferreira', 4, 4], light: ['V. Rao', 2, 1.5] },
-  { tcin: '95052896', priority: 'Low Priority', complexity: 'Very Simple', start: -24, mod: ['J. Park', 3, 3], tex: ['S. Thomas', 2, 1.5], light: ['K. Tan', 1.5, 1.5] },
-  { tcin: '95052913', priority: 'High Priority', complexity: 'Medium', start: -22, mod: ['A. Silva', 8, 7], tex: ['R. Menon', 6, 6.5], light: ['K. Tan', 3, 3] },
-  { tcin: '95052938', priority: 'Medium Priority', complexity: 'Hard', start: -20, mod: ['D. Nair', 10, 12], tex: ['L. Ferreira', 8, 7.5], light: ['V. Rao', 4, 3.5] },
-];
+// Ops: [dayOffset, op, ...args]; day 0 is today. Each asset is replayed through the same rules the app applies.
 
-const historyOps = (h) => {
-  let d = h.start;
-  const ops = [];
-  const at = (...op) => ops.push([d, ...op]);
-  at('dispatch'); at('assign', 'Modelling', h.mod[0], h.mod[1]);
-  d += 3; at('log', 'Modelling', h.mod[2]); at('advance', 'Modelling');
-  d += 1; at('assign', 'Texturing', h.tex[0], h.tex[1]);
-  if (h.sendBack === 'Modelling') {
-    d += 1; at('rework', 'Texturing', 'Modelling', h.comment); at('assign', 'Modelling', h.mod[0], 2);
-    d += 1; at('log', 'Modelling', 1.5); at('advance', 'Modelling'); at('assign', 'Texturing', h.tex[0], h.tex[1]);
-  }
-  d += 2; at('log', 'Texturing', h.tex[2]); at('advance', 'Texturing');
-  d += 1; at('assign', 'Lighting', h.light[0], h.light[1]);
-  if (h.sendBack === 'Texturing') {
-    d += 1; at('rework', 'Lighting', 'Texturing', h.comment); at('assign', 'Texturing', h.tex[0], 1.5);
-    d += 1; at('log', 'Texturing', 1); at('advance', 'Texturing'); at('assign', 'Lighting', h.light[0], h.light[1]);
-  }
-  d += 1; at('log', 'Lighting', h.light[2]); at('uploaded');
-  d += 1; at('approved');
-  return ops;
+// The demo team. Seven experienced artists, then four hires over the last five weeks — while Lighting stays at two
+// people, so the Throughput view has a real bottleneck to find. `start` is days from today.
+export const DEMO_TEAM = [
+  { name: 'A. Silva', stage: 'Modelling', start: -900 },
+  { name: 'J. Park', stage: 'Modelling', start: -700, sendBack: 0.3 },
+  { name: 'D. Nair', stage: 'Modelling', start: -420 },
+  { name: 'M. Oyelaran', stage: 'Modelling', start: -35 },
+  { name: 'P. Iyer', stage: 'Modelling', start: -12 },
+  { name: 'R. Menon', stage: 'Texturing', start: -800 },
+  { name: 'L. Ferreira', stage: 'Texturing', start: -380 },
+  { name: 'S. Thomas', stage: 'Texturing', start: -28 },
+  { name: 'T. Wong', stage: 'Texturing', start: -9 },
+  { name: 'K. Tan', stage: 'Lighting', start: -950 },
+  { name: 'V. Rao', stage: 'Lighting', start: -500 },
+];
+const NEW_FOR_DAYS = 56;
+const isNewcomer = (member, day) => day - member.start < NEW_FOR_DAYS;
+
+// Small seeded random generator, so every reset produces the same history.
+const seeded = (seed) => () => {
+  seed = (seed + 0x6d2b79f5) | 0;
+  let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 };
 
-// Weekly manual entries (leaves in days, training and QA in hours); key 0 = this week, -1 = last week.
-const ARTIST_LOG = {
-  0: {
-    'A. Silva': { leaves: '0', training: '2', qaHours: '0' },
-    'J. Park': { leaves: '1', training: '0', qaHours: '0' },
-    'M. Oyelaran': { leaves: '0', training: '4', qaHours: '0' },
-    'D. Nair': { leaves: '0.5', training: '0', qaHours: '0' },
-    'R. Menon': { leaves: '0', training: '0', qaHours: '1.5' },
-    'L. Ferreira': { leaves: '0', training: '2', qaHours: '0' },
-    'S. Thomas': { leaves: '1', training: '0', qaHours: '0' },
-    'K. Tan': { directUpload: '2', qaDone: '3', leaves: '0', training: '0', qaHours: '6' },
-    'V. Rao': { directUpload: '1', qaDone: '1', leaves: '0', training: '1', qaHours: '3' },
-  },
-  [-1]: {
-    'A. Silva': { leaves: '1', training: '0', qaHours: '0' },
-    'J. Park': { leaves: '0', training: '3', qaHours: '0' },
-    'M. Oyelaran': { leaves: '0', training: '0', qaHours: '0' },
-    'D. Nair': { leaves: '2', training: '0', qaHours: '0' },
-    'R. Menon': { leaves: '0', training: '1', qaHours: '2' },
-    'L. Ferreira': { leaves: '0.5', training: '0', qaHours: '0' },
-    'S. Thomas': { leaves: '0', training: '2', qaHours: '0' },
-    'K. Tan': { directUpload: '3', qaDone: '4', leaves: '0', training: '0', qaHours: '8' },
-    'V. Rao': { directUpload: '1', qaDone: '2', leaves: '1', training: '0', qaHours: '2.5' },
-  },
+const COMPLEXITY_MIX = ['Very Simple', 'Simple', 'Simple', 'Medium', 'Medium', 'Medium', 'Hard', 'Hard', 'Very Hard'];
+// Estimated hours and calendar days per complexity, for an experienced artist.
+const EFFORT = {
+  Modelling: { 'Very Simple': [6, 2], Simple: [10, 3], Medium: [16, 4], Hard: [20, 5], 'Very Hard': [28, 6] },
+  Texturing: { 'Very Simple': [4, 1], Simple: [8, 2], Medium: [12, 3], Hard: [14, 3], 'Very Hard': [18, 4] },
+  Lighting: { 'Very Simple': [5, 2], Simple: [6, 2], Medium: [8, 3], Hard: [10, 3], 'Very Hard': [12, 4] },
+};
+const FEEDBACK = {
+  Modelling: [
+    'Proportions are off against the reference photo — the handle should be thicker.',
+    'Bevels read flat once the material is on; sharpen them and re-export the high-poly.',
+    'Normals flipped on the lid — highlights read inside-out under the key light.',
+    'Scale is wrong: the product is 20% too small next to the reference cube.',
+  ],
+  Texturing: [
+    'Fabric weave tiles visibly across the cushion — needs a larger texture or a break-up mask.',
+    'Label reads blurry in the hero render — please rebake it at 2K.',
+    'Colour doesn’t match the swatch; the red is too saturated.',
+    'Seams visible along the side panel UVs.',
+  ],
+};
+const PRIORITY_MIX = ['High Priority', 'Medium Priority', 'Medium Priority', 'Low Priority'];
+
+// Replays how work would have flowed through the team: each artist picks up the next asset when free,
+// newcomers are slower and get more sent back, and anything not reached by today stays open.
+const generateHistory = () => {
+  const rand = seeded(20260924);
+  const pick = (list) => list[Math.floor(rand() * list.length)];
+  const round = (n) => Math.round(n * 2) / 2;
+  const members = (stage) => DEMO_TEAM.filter((m) => m.stage === stage);
+  const speed = (member, day) => (isNewcomer(member, day) ? 1.6 : 1);
+  const hoursFor = (member, day, est) => round(est * (isNewcomer(member, day) ? 1.35 + rand() * 0.3 : 0.85 + rand() * 0.25));
+  const sendBackChance = (member, day) => member.sendBack ?? (isNewcomer(member, day) ? 0.35 : 0.07);
+
+  const assets = [];
+  let serial = 0;
+  for (const modeller of members('Modelling')) {
+    let day = Math.max(modeller.start, -84) + (serial % 3);
+    while (day <= -3) {
+      const complexity = pick(COMPLEXITY_MIX);
+      const [est, days] = EFFORT.Modelling[complexity];
+      const asset = {
+        tcin: String(95040100 + serial * 7),
+        priority: pick(PRIORITY_MIX),
+        complexity,
+        allot: day,
+        due: day + 14,
+        ops: [],
+        modeller,
+      };
+      serial += 1;
+      asset.ops.push([day, 'dispatch'], [day, 'assign', 'Modelling', modeller.name, est]);
+      const done = day + Math.ceil(days * speed(modeller, day));
+      if (done > -1) {
+        asset.ops.push([-1, 'log', 'Modelling', round(est * 0.5)]);
+        asset.open = true;
+      } else {
+        asset.ops.push([done, 'log', 'Modelling', hoursFor(modeller, day, est)], [done, 'advance', 'Modelling']);
+        asset.ready = done;
+      }
+      assets.push(asset);
+      day = done;
+    }
+  }
+
+  // Each later stage takes assets in the order they arrive, from whichever of its artists is free first.
+  const runStage = (stage, upstream) => {
+    const free = new Map(members(stage).map((m) => [m.name, m.start]));
+    const queue = assets.filter((a) => a.ready !== undefined && !a.open).sort((a, b) => a.ready - b.ready);
+    for (const asset of queue) {
+      const people = members(stage);
+      const artist = people.reduce((a, b) => (free.get(b.name) < free.get(a.name) ? b : a), people[0]);
+      const start = Math.max(asset.ready + 1, free.get(artist.name));
+      if (start > -1) {
+        // Nobody free before today: it waits in this stage's queue, unassigned.
+        asset.open = true;
+        continue;
+      }
+      const [est, days] = EFFORT[stage][asset.complexity];
+      asset.ops.push([start, 'assign', stage, artist.name, est]);
+      let day = start + Math.ceil(days * speed(artist, start));
+      const upstreamArtist = stage === 'Texturing' ? asset.modeller : asset.texturer;
+      if (day <= -2 && rand() < sendBackChance(upstreamArtist, asset.ready)) {
+        // Caught a problem from the stage before: back it goes, the same artist fixes it, and it returns.
+        asset.ops.push([day, 'log', stage, round(est * 0.4)], [day, 'rework', stage, upstream, pick(FEEDBACK[upstream])]);
+        // Most fixes are the artist's own issue and get 0 hours; client changes get hours allocated.
+        asset.ops.push([day, 'assign', upstream, upstreamArtist.name, rand() < 0.75 ? 0 : 2]);
+        const fixed = day + 1 + (isNewcomer(upstreamArtist, day) ? 1 : 0);
+        asset.ops.push([fixed, 'log', upstream, round(1.5 + rand() * 2)], [fixed, 'advance', upstream]);
+        const back = fixed;
+        asset.ops.push([back, 'assign', stage, artist.name, est]);
+        day = back + Math.ceil(days * speed(artist, back) * 0.6);
+      }
+      if (day > -1) {
+        asset.ops.push([-1, 'log', stage, round(est * 0.5)]);
+        asset.open = true;
+        free.set(artist.name, day);
+        continue;
+      }
+      asset.ops.push([day, 'log', stage, hoursFor(artist, start, est)]);
+      free.set(artist.name, day);
+      if (stage === 'Texturing') {
+        asset.texturer = artist;
+        asset.ops.push([day, 'advance', 'Texturing']);
+        asset.ready = day;
+      } else {
+        asset.ops.push([day, 'uploaded']);
+        const approved = day + 1 + Math.floor(rand() * 3);
+        if (approved <= -1) asset.ops.push([approved, 'approved']);
+      }
+    }
+  };
+  runStage('Texturing', 'Modelling');
+  runStage('Lighting', 'Texturing');
+  for (const asset of assets) {
+    delete asset.ready;
+    delete asset.open;
+    delete asset.modeller;
+    delete asset.texturer;
+    asset.ops.sort((a, b) => a[0] - b[0]);
+  }
+  return assets;
+};
+
+// Weekly manual entries (leaves in days, training and QA in hours), generated for the last 12 weeks.
+// Newcomers spend time in training; experienced artists review their work.
+const generateArtistLog = () => {
+  const rand = seeded(7);
+  const weeks = {};
+  for (let offset = -11; offset <= 0; offset += 1) {
+    const day = offset * 7;
+    const entries = {};
+    for (const m of DEMO_TEAM) {
+      if (m.start > day + 6) continue;
+      const newcomer = isNewcomer(m, day);
+      const mentoring = !newcomer && DEMO_TEAM.some((o) => o.stage === m.stage && o.start <= day + 6 && isNewcomer(o, day));
+      const entry = {
+        leaves: rand() < 0.15 ? (rand() < 0.5 ? '0.5' : '1') : '0',
+        training: newcomer ? String(day - m.start < 21 ? 6 : 3) : '0',
+        qaHours: mentoring ? String(3 + Math.floor(rand() * 3)) : m.stage === 'Lighting' ? String(2 + Math.floor(rand() * 3)) : '0',
+      };
+      if (m.stage === 'Lighting') {
+        entry.directUpload = String(1 + Math.floor(rand() * 3));
+        entry.qaDone = String(2 + Math.floor(rand() * 3));
+      }
+      entries[m.name] = entry;
+    }
+    weeks[offset] = entries;
+  }
+  return weeks;
 };
 
 const DEMO_COMMENTS = {
@@ -197,7 +305,7 @@ const CURRENT = [
 
 const ASSETS = [
   ...CURRENT,
-  ...HISTORY.map((h) => ({ tcin: h.tcin, priority: h.priority, complexity: h.complexity, allot: h.start, due: h.start + 12, ops: historyOps(h) })),
+  ...generateHistory(),
 ];
 
 const num = (n) => (n === undefined || n === null ? '' : String(n));
@@ -314,10 +422,26 @@ export const buildDemoProject = (today = todayISO()) => {
 
   const thisWeek = weekStart(today);
   out.artistLog = Object.fromEntries(
-    Object.entries(ARTIST_LOG).map(([offset, entries]) => [addDays(thisWeek, Number(offset) * 7), entries]),
+    Object.entries(generateArtistLog()).map(([offset, entries]) => [addDays(thisWeek, Number(offset) * 7), entries]),
   );
 
   return out;
+};
+
+// Puts the demo artists on the team with their start dates, which the Throughput view uses for headcount.
+const withDemoTeam = (artists, replace) => {
+  const today = todayISO();
+  const roster = Array.isArray(artists) ? [...artists] : [];
+  for (const m of DEMO_TEAM) {
+    const startDate = addDays(today, m.start);
+    const i = roster.findIndex((a) => a.name.toLowerCase() === m.name.toLowerCase());
+    if (i < 0) {
+      roster.push({ id: `demo-${m.name.replace(/[^a-z]/gi, '').toLowerCase()}`, name: m.name, stages: [m.stage], email: '', role: 'Artist', active: true, startDate });
+    } else if (replace || !roster[i].startDate) {
+      roster[i] = { ...roster[i], startDate, stages: roster[i].stages?.includes(m.stage) ? roster[i].stages : [...(roster[i].stages || []), m.stage] };
+    }
+  }
+  return roster;
 };
 
 export const withDemoProject = (state, { replace = false } = {}) => {
@@ -329,6 +453,7 @@ export const withDemoProject = (state, { replace = false } = {}) => {
   }
   return {
     ...state,
+    artists: withDemoTeam(state.artists, replace),
     artistLog,
     assetComments: { ...state.assetComments, [DEMO_PROJECT]: demo.assetComments },
     Manager: { ...state.Manager, [DEMO_PROJECT]: demo.Manager },

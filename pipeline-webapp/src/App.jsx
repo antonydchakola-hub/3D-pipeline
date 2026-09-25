@@ -4,6 +4,7 @@ import ProductionView from './ProductionView';
 import ConsoleView from './ConsoleView';
 import AssetRecord from './AssetRecord';
 import ArtistsView from './ArtistsView';
+import ThroughputView from './ThroughputView';
 import ProfileMenu from './ProfileMenu';
 import ProjectSwitcher from './ProjectSwitcher';
 import TeamDialog from './TeamDialog';
@@ -71,13 +72,15 @@ const MainApp = () => {
   const { canManage, isAdmin } = useAuth();
   const [accountsOpen, setAccountsOpen] = useState(false);
   const [project, setProject] = useState(projects.includes(DEMO_PROJECT) ? DEMO_PROJECT : projects[0]);
-  const [mode, setMode] = useState('grid');
+  const [chosenMode, setMode] = useState('grid');
   const [stage, setStage] = useState('Manager');
   const [asset, setAsset] = useState(null);
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState({ priority: '', artist: '' });
   const [artistStage, setArtistStage] = useState('Modelling');
   const [artistScope, setArtistScope] = useState(ALL_PROJECTS);
+  const [flowScope, setFlowScope] = useState(null);
+  const [flowWeeks, setFlowWeeks] = useState(8);
   const [week, setWeek] = useState(() => weekStart(todayISO()));
   const [teamOpen, setTeamOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
@@ -95,6 +98,8 @@ const MainApp = () => {
     highlightTimer.current = setTimeout(() => setHighlightId(null), 2600);
   };
 
+  // Throughput is for managers and admins only.
+  const mode = chosenMode === 'throughput' && !canManage ? 'grid' : chosenMode;
   const activeProject = projects.includes(project) ? project : projects[0];
   const health = stageHealth(data, activeProject);
   const managerRows = rowsFor(data, 'Manager', activeProject);
@@ -120,6 +125,11 @@ const MainApp = () => {
 
   const thisWeek = weekStart(todayISO());
   const artistProjects = artistScope === ALL_PROJECTS ? projects : [artistScope].filter((p) => projects.includes(p));
+  // Throughput looks at the whole team, so by default it covers every real project; the Demo only when you're in it.
+  const realProjects = projects.filter((p) => p !== DEMO_PROJECT);
+  const flowDefault = activeProject === DEMO_PROJECT || !realProjects.length ? DEMO_PROJECT : ALL_PROJECTS;
+  const flowChoice = flowScope && (flowScope === ALL_PROJECTS || projects.includes(flowScope)) ? flowScope : flowDefault;
+  const flowProjects = flowChoice === ALL_PROJECTS ? realProjects : [flowChoice];
   const stripActive = mode === 'grid' ? stage : mode === 'artists' ? artistStage : null;
 
   const handleAddProject = () => {
@@ -141,6 +151,8 @@ const MainApp = () => {
     content = <AssetRecord key={`${activeProject}:${asset}`} project={activeProject} tcn={asset} onBack={() => setAsset(null)} />;
   } else if (mode === 'console') {
     content = <ConsoleView project={activeProject} />;
+  } else if (mode === 'throughput') {
+    content = <ThroughputView data={data} projects={flowProjects} weekCount={flowWeeks} onOpenTeam={canManage ? () => setTeamOpen(true) : undefined} />;
   } else if (mode === 'artists') {
     content = <ArtistsView stage={artistStage} projects={artistProjects} week={week} query={query} onOpenAsset={openAsset} />;
   } else if (stage === 'Manager') {
@@ -168,6 +180,11 @@ const MainApp = () => {
               <button type="button" role="tab" aria-selected={mode === 'artists'} className={mode === 'artists' ? 'is-active' : ''} onClick={() => setMode('artists')}>
                 <Icon name="user" size={14} />Artists
               </button>
+              {canManage && (
+                <button type="button" role="tab" aria-selected={mode === 'throughput'} className={mode === 'throughput' ? 'is-active' : ''} onClick={() => setMode('throughput')}>
+                  <Icon name="trend" size={14} />Throughput
+                </button>
+              )}
             </div>
 
             {mode === 'artists' && (
@@ -207,6 +224,28 @@ const MainApp = () => {
                 <span className="divider" />
                 <FilterSelect label="Priority" value={filters.priority} options={PRIORITIES} format={priorityShort} onChange={(v) => setFilters((f) => ({ ...f, priority: v }))} />
                 <FilterSelect label="Artist" value={filters.artist} options={artists} onChange={(v) => setFilters((f) => ({ ...f, artist: v }))} />
+              </>
+            )}
+            {mode === 'throughput' && (
+              <>
+                <span className="divider" />
+                <div className="segmented" role="tablist" aria-label="Period">
+                  {[4, 8, 12].map((n) => (
+                    <button key={n} type="button" role="tab" aria-selected={flowWeeks === n} className={flowWeeks === n ? 'is-active' : ''} onClick={() => setFlowWeeks(n)}>
+                      {n} weeks
+                    </button>
+                  ))}
+                </div>
+                <label className={`filter${flowChoice !== ALL_PROJECTS ? ' is-set' : ''}`}>
+                  <Icon name="filter" size={13} />
+                  <span className="filter-label">Projects:</span>
+                  <select value={flowChoice} onChange={(e) => setFlowScope(e.target.value)} aria-label="Projects">
+                    <option value={ALL_PROJECTS}>{realProjects.length ? 'All except Demo' : 'All'}</option>
+                    {projects.map((p) => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                  <Icon name="chevronDown" size={12} />
+                </label>
+                {flowChoice !== ALL_PROJECTS && <span className="commandbar-note">Output counts only {flowChoice}; headcount is the whole team.</span>}
               </>
             )}
             {mode === 'console' && <span className="commandbar-note">Live from {activeProject} — every figure is computed from the stage sheets.</span>}
@@ -251,6 +290,15 @@ const MainApp = () => {
         <footer className="statusbar">
           <span>{STAGE_LABEL[artistStage]} · running totals across {artistScope === ALL_PROJECTS ? `all ${projects.length} projects` : artistScope}</span>
           <span>Leaves, training and QA hours are for the week of {formatDate(week)}</span>
+          <div className="spacer" />
+          <SyncIndicator />
+        </footer>
+      )}
+
+      {!asset && mode === 'throughput' && (
+        <footer className="statusbar">
+          <span>Last {flowWeeks} weeks · {flowChoice === ALL_PROJECTS ? (realProjects.length ? 'all projects except Demo' : 'all projects') : flowChoice}</span>
+          <span>Work is measured in allocated hours, counted when each stage finishes its part</span>
           <div className="spacer" />
           <SyncIndicator />
         </footer>

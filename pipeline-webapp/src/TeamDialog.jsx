@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { usePipeline } from './PipelineContext';
 import { Avatar, Icon } from './ui';
-import { ROLES, STAGES, STAGE_TONE, artistUsage, matchesQuery } from './pipelineModel';
+import { ROLES, STAGES, STAGE_TONE, artistUsage, matchesQuery, todayISO } from './pipelineModel';
 
 const StageToggles = ({ value, onChange, label }) => (
   <div className="stage-toggles" role="group" aria-label={label}>
@@ -64,6 +64,15 @@ const MemberRow = ({ member }) => {
         onChange={(e) => updateArtist(member.id, { email: e.target.value })}
         aria-label={`Login email for ${member.name}`}
       />
+      <input
+        className="field member-start"
+        type="date"
+        value={member.startDate || ''}
+        max={todayISO()}
+        onChange={(e) => updateArtist(member.id, { startDate: e.target.value })}
+        title="First day on the team — Throughput uses it to count headcount and spot new artists"
+        aria-label={`Start date of ${member.name}`}
+      />
       <select className="field member-role" value={member.role || 'Artist'} onChange={(e) => updateArtist(member.id, { role: e.target.value })} aria-label={`Role of ${member.name}`}>
         {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
       </select>
@@ -92,6 +101,7 @@ const TeamDialog = ({ onClose, defaultStage }) => {
   const [stages, setStages] = useState(defaultStage ? [defaultStage] : []);
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('Artist');
+  const [startDate, setStartDate] = useState(todayISO);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const nameRef = useRef(null);
@@ -117,7 +127,7 @@ const TeamDialog = ({ onClose, defaultStage }) => {
     const clean = name.trim();
     if (!clean) { setError('Enter a name'); return; }
     if (!stages.length) { setError('Pick at least one stage'); return; }
-    if (!addArtist({ name: clean, stages, email, role })) { setError(`${clean} is already on the team`); return; }
+    if (!addArtist({ name: clean, stages, email, role, startDate })) { setError(`${clean} is already on the team`); return; }
     setName(''); setEmail(''); setRole('Artist'); setError('');
     nameRef.current?.focus();
   };
@@ -144,6 +154,7 @@ const TeamDialog = ({ onClose, defaultStage }) => {
           <input ref={nameRef} className="field" value={name} onChange={(e) => { setName(e.target.value); setError(''); }} placeholder="New artist name" aria-label="New artist name" />
           <StageToggles value={stages} onChange={(s) => { setStages(s); setError(''); }} label="Stages for the new artist" />
           <input className="field member-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Login email (optional)" aria-label="Login email for the new artist" />
+          <input className="field member-start" type="date" value={startDate} max={todayISO()} onChange={(e) => setStartDate(e.target.value)} title="First day on the team" aria-label="Start date for the new artist" />
           <select className="field member-role" value={role} onChange={(e) => setRole(e.target.value)} aria-label="Role for the new artist">
             {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
@@ -157,7 +168,7 @@ const TeamDialog = ({ onClose, defaultStage }) => {
         </div>
 
         <footer className="modal-foot">
-          <span>Renaming updates every row that uses the name. Artists with work assigned can be deactivated but not removed, so their history stays.</span>
+          <span>Start dates let Throughput count headcount week by week and spot new artists. Renaming updates every row that uses the name. Artists with work assigned can be deactivated but not removed, so their history stays.</span>
         </footer>
       </div>
     </div>

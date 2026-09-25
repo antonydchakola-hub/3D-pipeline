@@ -15,6 +15,7 @@ const PATHS = {
   alert: <><path d="M12 4.5L21 19.5H3z" /><path d="M12 10.5v3.5" /><path d="M12 17h0.01" /></>,
   plus: <><path d="M12 5.5v13" /><path d="M5.5 12h13" /></>,
   grid: <><rect x="3.5" y="5" width="17" height="14" rx="2" /><path d="M3.5 10h17" /><path d="M9.5 10v9" /></>,
+  trend: <><path d="M4 20h16" /><path d="M5 15.5l4.5-4.5 3.5 3 6-6.5" /><path d="M15 7.5h4v4" /></>,
   chart: <><path d="M4 20h16" /><path d="M7 16v-5" /><path d="M12 16V6" /><path d="M17 16v-8" /></>,
   close: <><path d="M6 6l12 12" /><path d="M18 6L6 18" /></>,
   clock: <><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></>,

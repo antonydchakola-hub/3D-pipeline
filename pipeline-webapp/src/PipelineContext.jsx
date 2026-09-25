@@ -584,10 +584,10 @@ export const PipelineProvider = ({ children }) => {
     });
   };
 
-  const addArtist = ({ name, stages, email = '', role = 'Artist' }) => {
+  const addArtist = ({ name, stages, email = '', role = 'Artist', startDate = todayISO() }) => {
     const clean = name.trim();
     if (!clean || (stateRef.current.artists || []).some(a => a.name.toLowerCase() === clean.toLowerCase())) return false;
-    commit(prev => ({ ...prev, artists: [...(prev.artists || []), newMember(clean, stages, { email: email.trim(), role })] }));
+    commit(prev => ({ ...prev, artists: [...(prev.artists || []), newMember(clean, stages, { email: email.trim(), role, startDate })] }));
     notify(`${clean} added to the team`);
     return true;
   };
