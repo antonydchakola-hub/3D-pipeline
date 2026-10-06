@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { HOURS_FIELD, STAGES, formatDate, hours, hoursText, stageAllocated, todayISO } from './pipelineModel';
+import {
+  CLIENT_COLORS, HOURS_FIELD, PIPELINE_CLIENT, STAGES, formatDate, hours, hoursText, stageAllocated, todayISO, withDefaultClients,
+} from './pipelineModel';
 import { withDemoProject } from './mockData';
 import { useAuth } from './auth';
 import { applyRemoteRecord, diffStates, fetchChanges, fetchState, recordKey, recordsToState, seedDatabase, sendMutations } from './sync';
@@ -673,9 +675,31 @@ export const PipelineProvider = ({ children }) => {
   };
 
   const projects = data ? Object.keys(data.Manager) : [];
+  const clients = withDefaultClients(data?.clients);
+
+  // Returns the new client's id, or false when the name is taken.
+  const addClient = ({ name, description = '' }) => {
+    const clean = name.trim();
+    const list = withDefaultClients(stateRef.current.clients);
+    if (!clean || list.some(c => c.name.toLowerCase() === clean.toLowerCase())) return false;
+    const client = { id: generateId(), name: clean, description: description.trim(), color: CLIENT_COLORS[(list.length - 1) % CLIENT_COLORS.length], workflow: null };
+    commit(prev => ({ ...prev, clients: [...withDefaultClients(prev.clients), client] }));
+    notify(`${clean} added`);
+    return client.id;
+  };
+
+  const updateClient = (id, changes) => {
+    commit(prev => ({ ...prev, clients: withDefaultClients(prev.clients).map(c => (c.id === id ? { ...c, ...changes } : c)) }));
+  };
+
+  // Target holds the pipeline built so far, so it can't be removed.
+  const removeClient = (id) => {
+    if (id === PIPELINE_CLIENT) return;
+    commit(prev => ({ ...prev, clients: withDefaultClients(prev.clients).filter(c => c.id !== id) }));
+  };
 
   return (
-    <PipelineContext.Provider value={{ data, projects, notice, notify, loadState, syncStatus, retryLoad, updateRow, dispatchToModelling, handleStatusChange, addAsset, nextAssetNumber, findAsset, addProject, addComment, resetDemo, setArtistLog, addArtist, updateArtist, renameArtist, removeArtist, setAssetComment }}>
+    <PipelineContext.Provider value={{ data, projects, notice, notify, loadState, syncStatus, retryLoad, updateRow, dispatchToModelling, handleStatusChange, addAsset, nextAssetNumber, findAsset, addProject, addComment, resetDemo, setArtistLog, addArtist, updateArtist, renameArtist, removeArtist, setAssetComment, clients, addClient, updateClient, removeClient }}>
       {children}
     </PipelineContext.Provider>
   );

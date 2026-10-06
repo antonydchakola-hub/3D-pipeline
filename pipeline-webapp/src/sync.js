@@ -7,7 +7,7 @@ export const recordKey = (r) => `${r.kind}:${r.id}`;
 
 const emptyState = () => ({
   Manager: {}, Modelling: {}, Texturing: {}, Lighting: {},
-  events: {}, artistLog: {}, assetComments: {}, artists: [],
+  events: {}, artistLog: {}, assetComments: {}, artists: [], clients: [],
 });
 
 const ensureProject = (state, project) => {
@@ -34,6 +34,9 @@ export const stateToRecords = (data) => {
   }
   for (const [project, events] of Object.entries(data.events || {})) {
     for (const ev of events) out.push({ kind: 'event', id: ev.id, project, stage: '', data: ev, sig: ev });
+  }
+  for (const client of data.clients || []) {
+    out.push({ kind: 'client', id: client.id, project: '', stage: '', data: client, sig: client });
   }
   for (const member of data.artists || []) {
     out.push({ kind: 'artist', id: member.id, project: '', stage: '', data: member, sig: member });
@@ -105,6 +108,9 @@ function applyRecordMutable(state, r) {
     case 'artist':
       state.artists.push(r.data);
       break;
+    case 'client':
+      state.clients.push(r.data);
+      break;
     case 'artistlog':
       state.artistLog[r.data.week] = { ...state.artistLog[r.data.week], [r.data.artist]: r.data.values };
       break;
@@ -147,6 +153,8 @@ export const applyRemoteRecord = (state, r) => {
       const list = state.events[r.project];
       return put('events', r.project, r.deleted ? removeById(list, r.id) : upsertById(list, r.data));
     }
+    case 'client':
+      return { ...state, clients: r.deleted ? removeById(state.clients || [], r.id) : upsertById(state.clients || [], r.data) };
     case 'artist':
       return { ...state, artists: r.deleted ? removeById(state.artists, r.id) : upsertById(state.artists, r.data) };
     case 'artistlog': {

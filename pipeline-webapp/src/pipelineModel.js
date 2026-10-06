@@ -419,3 +419,13 @@ export const matchesQuery = (query, ...values) => {
   if (!q) return true;
   return values.some((v) => String(v || '').toLowerCase().includes(q));
 };
+
+// ---------- clients ----------
+
+// Target's pipeline (the Manager / Modelling / Texturing / Lighting sheets) is the one built so far; every
+// project in it belongs to Target. Other clients get their own workflows later.
+export const PIPELINE_CLIENT = 'target';
+const TARGET = { id: PIPELINE_CLIENT, name: 'Target', description: 'Product 3D models', color: '#c42b22', workflow: STAGES };
+export const CLIENT_COLORS = ['#0e8a6e', '#2f6fc9', '#8a52c4', '#b06a12', '#3a4b66'];
+
+export const withDefaultClients = (list = []) => (list.some((c) => c.id === PIPELINE_CLIENT) ? list : [TARGET, ...list]);

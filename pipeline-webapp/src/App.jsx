@@ -1,10 +1,12 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import ManagerView from './ManagerView';
 import ProductionView from './ProductionView';
 import ConsoleView from './ConsoleView';
 import AssetRecord from './AssetRecord';
 import ArtistsView from './ArtistsView';
 import ThroughputView from './ThroughputView';
+import HomePage from './HomePage';
+import { ClientSetupPage, ToolPage } from './ToolPages';
 import ProfileMenu from './ProfileMenu';
 import ProjectSwitcher from './ProjectSwitcher';
 import TeamDialog from './TeamDialog';
@@ -16,18 +18,19 @@ import { PipelineProvider, usePipeline } from './PipelineContext';
 import { Icon } from './ui';
 import { DEMO_PROJECT } from './mockData';
 import {
-  PRIORITIES, STAGES, STAGE_LABEL, addDays, formatDate, priorityShort, rowsFor, stageHealth, todayISO, weekStart,
+  PIPELINE_CLIENT, PRIORITIES, STAGES, STAGE_LABEL, addDays, formatDate, priorityShort, rowsFor, stageHealth, todayISO, weekStart,
 } from './pipelineModel';
 
 const ALL_PROJECTS = '__all__';
 
 const TopBar = ({ projects, project, onProject, onAddProject, onResetDemo, onManageTeam, onManageAccounts, canManage, query, onQuery }) => (
   <header className="topbar">
-    <div className="brand">
+    <a href="#/" className="brand" title="Back to home">
       <span className="brand-mark"><Icon name="cube" size={17} stroke={1.6} /></span>
       <span className="brand-name">3D Model Pipeline</span>
-    </div>
+    </a>
     <span className="divider" />
+    <span className="crumb">Target</span>
     <ProjectSwitcher projects={projects} project={project} onProject={onProject} />
     {canManage && (
       <button type="button" className="icon-btn" onClick={onAddProject} title="New project" aria-label="New project">
@@ -353,13 +356,62 @@ const LoadGate = ({ children }) => {
   );
 };
 
+// Pages live in the URL hash (#/, #/client/target, #/team…), so the browser's Back button works.
+const readRoute = () => {
+  const [page = '', id = ''] = window.location.hash.replace(/^#\/?/, '').split('/');
+  return { page: page || 'home', id: decodeURIComponent(id) };
+};
+
+const useRoute = () => {
+  const [route, setRoute] = useState(readRoute);
+  useEffect(() => {
+    const onChange = () => setRoute(readRoute());
+    window.addEventListener('hashchange', onChange);
+    return () => window.removeEventListener('hashchange', onChange);
+  }, []);
+  return route;
+};
+
+// The home page and the management pages share this simple top bar; Target's pipeline has its own.
+const Shell = () => {
+  const route = useRoute();
+  const { isAdmin } = useAuth();
+  const { notice, notify } = usePipeline();
+  const [accountsOpen, setAccountsOpen] = useState(false);
+
+  useEffect(() => { window.scrollTo(0, 0); }, [route.page, route.id]);
+
+  if (route.page === 'client' && route.id === PIPELINE_CLIENT) return <MainApp />;
+
+  let content;
+  if (route.page === 'home') content = <HomePage />;
+  else if (route.page === 'client') content = <ClientSetupPage clientId={route.id} />;
+  else content = <ToolPage toolId={route.page} />;
+
+  return (
+    <div className="app">
+      <header className="topbar">
+        <a href="#/" className="brand" title="Home">
+          <span className="brand-mark"><Icon name="cube" size={17} stroke={1.6} /></span>
+          <span className="brand-name">3D Studio</span>
+        </a>
+        <div className="spacer" />
+        <ProfileMenu onManageAccounts={() => setAccountsOpen(true)} />
+      </header>
+      <main className="main scroll-page">{content}</main>
+      {accountsOpen && isAdmin && <AccountsDialog onClose={() => setAccountsOpen(false)} notify={notify} />}
+      {notice && <div className="toast" role="status"><Icon name="check" size={15} stroke={2.4} />{notice}</div>}
+    </div>
+  );
+};
+
 function App() {
   return (
     <AuthProvider>
       <AuthGate>
         <PipelineProvider>
           <LoadGate>
-            <MainApp />
+            <Shell />
           </LoadGate>
         </PipelineProvider>
       </AuthGate>

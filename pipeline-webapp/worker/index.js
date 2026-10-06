@@ -7,7 +7,7 @@ import {
   requireRole, requireUser, updateUser,
 } from './auth';
 
-const KINDS = new Set(['project', 'manager', 'stage', 'event', 'artist', 'artistlog', 'comment']);
+const KINDS = new Set(['project', 'manager', 'stage', 'event', 'artist', 'artistlog', 'comment', 'client']);
 const STAGES = new Set(['', 'Modelling', 'Texturing', 'Lighting']);
 const MAX_BODY_BYTES = 1_800_000;
 const MAX_OPS = 3000;

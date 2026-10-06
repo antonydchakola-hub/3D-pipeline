@@ -42,12 +42,12 @@ const ProfileMenu = ({ onManageTeam, onManageAccounts }) => {
               <span className="menu-role">{ROLE_LABEL[user.role]}</span>
             </div>
           </div>
-          {canManage && (
+          {canManage && onManageTeam && (
             <button type="button" role="menuitem" className="menu-item" onClick={() => { setOpen(false); onManageTeam(); }}>
               <Icon name="user" size={15} />Manage team
             </button>
           )}
-          {isAdmin && (
+          {isAdmin && onManageAccounts && (
             <button type="button" role="menuitem" className="menu-item" onClick={() => { setOpen(false); onManageAccounts(); }}>
               <Icon name="lock" size={15} />Accounts
             </button>
