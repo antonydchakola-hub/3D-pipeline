@@ -18,6 +18,7 @@ const PATHS = {
   trend: <><path d="M4 20h16" /><path d="M5 15.5l4.5-4.5 3.5 3 6-6.5" /><path d="M15 7.5h4v4" /></>,
   chart: <><path d="M4 20h16" /><path d="M7 16v-5" /><path d="M12 16V6" /><path d="M17 16v-8" /></>,
   close: <><path d="M6 6l12 12" /><path d="M18 6L6 18" /></>,
+  calendar: <><rect x="4" y="5.5" width="16" height="14.5" rx="2" /><path d="M4 10h16" /><path d="M8.5 3.5v4" /><path d="M15.5 3.5v4" /></>,
   clock: <><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></>,
   split: <><path d="M7 4v16" /><path d="M7 12h6a4 4 0 0 0 4-4V4" /></>,
   upload: <><path d="M12 16V5" /><path d="M7 9.5l5-5 5 5" /><path d="M5 19h14" /></>,

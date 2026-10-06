@@ -154,47 +154,69 @@ const Billing = () => (
   </div>
 );
 
-const Tasks = () => {
-  const [tasks, setTasks] = useState([
-    { id: 1, text: 'Hire or reassign one more Lighting artist', due: 'Today', done: false },
-    { id: 2, text: 'Send September hours to Target for invoicing', due: 'Fri', done: false },
-    { id: 3, text: 'Add start dates for the imported artists', due: '', done: false },
-    { id: 4, text: 'Import the Target sheets', due: '', done: true },
-  ]);
-  const [draft, setDraft] = useState('');
-  const add = (e) => {
-    e.preventDefault();
-    if (!draft.trim()) return;
-    setTasks((list) => [...list, { id: Date.now(), text: draft.trim(), due: '', done: false }]);
-    setDraft('');
-  };
+// Overtime hours and loss-of-pay days per person, by month.
+const SAMPLE_OT_LOP = {
+  'September 2026': [
+    { name: 'A. Silva', stage: 'Modelling', ot: 6, lop: 0 },
+    { name: 'J. Park', stage: 'Modelling', ot: 0, lop: 1 },
+    { name: 'R. Menon', stage: 'Texturing', ot: 10, lop: 0 },
+    { name: 'S. Thomas', stage: 'Texturing', ot: 2, lop: 0.5 },
+    { name: 'K. Tan', stage: 'Lighting', ot: 14, lop: 0 },
+    { name: 'V. Rao', stage: 'Lighting', ot: 8, lop: 1 },
+  ],
+  'October 2026 (so far)': [
+    { name: 'A. Silva', stage: 'Modelling', ot: 2, lop: 0 },
+    { name: 'J. Park', stage: 'Modelling', ot: 0, lop: 0 },
+    { name: 'R. Menon', stage: 'Texturing', ot: 3, lop: 0 },
+    { name: 'S. Thomas', stage: 'Texturing', ot: 0, lop: 0 },
+    { name: 'K. Tan', stage: 'Lighting', ot: 5, lop: 0 },
+    { name: 'V. Rao', stage: 'Lighting', ot: 1, lop: 0.5 },
+  ],
+};
+const HIGH_OT = 12;
+
+const OtLop = () => {
+  const months = Object.keys(SAMPLE_OT_LOP);
+  const [month, setMonth] = useState(months[months.length - 1]);
+  const rows = SAMPLE_OT_LOP[month];
+  const totalOt = rows.reduce((s, r) => s + r.ot, 0);
+  const totalLop = rows.reduce((s, r) => s + r.lop, 0);
   return (
     <div className="tool-body">
+      <div className="segmented" role="tablist" aria-label="Month">
+        {months.map((m) => (
+          <button key={m} type="button" role="tab" aria-selected={month === m} className={month === m ? 'is-active' : ''} onClick={() => setMonth(m)}>{m}</button>
+        ))}
+      </div>
       <section className="panel">
-        <form className="task-add" onSubmit={add}>
-          <input className="field" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Add a task…" aria-label="New task" />
-          <button type="submit" className="btn btn-brand btn-small"><Icon name="plus" size={14} stroke={2.2} />Add</button>
-        </form>
-        <ul className="task-list">
-          {tasks.map((t) => (
-            <li key={t.id} className={t.done ? 'is-done' : ''}>
-              <label>
-                <input type="checkbox" checked={t.done} onChange={() => setTasks((list) => list.map((x) => (x.id === t.id ? { ...x, done: !x.done } : x)))} />
-                <span>{t.text}</span>
-              </label>
-              {t.due && <span className="task-due">{t.due}</span>}
-            </li>
-          ))}
-        </ul>
-        <p className="panel-foot"><span>Tasks here aren’t saved yet — this is a sample of how the page could work.</span></p>
+        <table className="tool-table">
+          <thead><tr><th>Person</th><th>Client</th><th>Stage</th><th className="right">OT hours</th><th className="right">LOP days</th></tr></thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.name}>
+                <td><span className="tp-who"><Avatar name={r.name} size={24} /><span className="tp-name">{r.name}</span></span></td>
+                <td>Target</td>
+                <td>{r.stage}</td>
+                <td className={`right num${r.ot >= HIGH_OT ? ' is-warn' : ''}`}>{r.ot ? `${r.ot} h` : '—'}</td>
+                <td className="right num">{r.lop ? `${r.lop} d` : '—'}</td>
+              </tr>
+            ))}
+            <tr className="tool-total">
+              <td colSpan={3}>Total</td>
+              <td className="right num">{totalOt} h</td>
+              <td className="right num">{totalLop} d</td>
+            </tr>
+          </tbody>
+        </table>
+        <p className="panel-foot"><span>OT is overtime; LOP is loss of pay. Overtime of {HIGH_OT} h or more in a month is highlighted.</span></p>
       </section>
     </div>
   );
 };
 
-const TOOL_BODY = { overview: Overview, team: Team, billing: Billing, tasks: Tasks };
+const TOOL_BODY = { overview: Overview, team: Team, billing: Billing, 'ot-lop': OtLop };
 // The overview uses live numbers; the others show sample data for now.
-const SAMPLE = { overview: false, team: true, billing: true, tasks: true };
+const SAMPLE = { overview: false, team: true, billing: true, 'ot-lop': true };
 
 export const ToolPage = ({ toolId }) => {
   const tool = TOOLS.find((t) => t.id === toolId);

@@ -77,7 +77,7 @@ const SignInPage = () => {
       <form className="signin-card" onSubmit={submit} noValidate>
         <div className="signin-brand">
           <span className="brand-mark"><Icon name="cube" size={20} stroke={1.6} /></span>
-          <span className="brand-name">3D Model Pipeline</span>
+          <span className="brand-name">C-Manage</span>
         </div>
         <h1>Sign in</h1>
         {message && !error && <p className="signin-note">{message}</p>}

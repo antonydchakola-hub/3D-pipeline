@@ -27,7 +27,7 @@ const TopBar = ({ projects, project, onProject, onAddProject, onResetDemo, onMan
   <header className="topbar">
     <a href="#/" className="brand" title="Back to home">
       <span className="brand-mark"><Icon name="cube" size={17} stroke={1.6} /></span>
-      <span className="brand-name">3D Model Pipeline</span>
+      <span className="brand-name">C-Manage</span>
     </a>
     <span className="divider" />
     <span className="crumb">Target</span>
@@ -393,7 +393,7 @@ const Shell = () => {
       <header className="topbar">
         <a href="#/" className="brand" title="Home">
           <span className="brand-mark"><Icon name="cube" size={17} stroke={1.6} /></span>
-          <span className="brand-name">3D Studio</span>
+          <span className="brand-name">C-Manage</span>
         </a>
         <div className="spacer" />
         <ProfileMenu onManageAccounts={() => setAccountsOpen(true)} />
