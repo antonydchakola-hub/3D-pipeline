@@ -1,11 +1,11 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { usePipeline } from './PipelineContext';
 import { useAuth } from './auth';
 import { ArtistCell, Dash, Icon, Pill, PillSelect } from './ui';
 import {
-  MAIN_STATUSES, PRIORITIES, REWORK_FIELD, STAGES, STAGE_LABEL, STAGE_TONE,
+  HOURS_FIELD, MAIN_STATUSES, PRIORITIES, REWORK_FIELD, STAGES, STAGE_LABEL, STAGE_TONE,
   assetComment, assetStage, displayStatus, formatDate, isDispatched, isOverdue, matchesQuery,
-  priorityShort, priorityTone, rowsFor, stageSnapshot, statusTone, todayISO,
+  hoursText, priorityShort, priorityTone, rowsFor, stageAllocated, stageSnapshot, statusTone, todayISO,
 } from './pipelineModel';
 
 const FROZEN = [
@@ -15,6 +15,37 @@ const FROZEN = [
   { key: 'priority', width: 92, left: 194 },
 ];
 const frozenStyle = (i) => ({ left: FROZEN[i].left, width: FROZEN[i].width, minWidth: FROZEN[i].width });
+
+const HOURS_LABEL = { Modelling: 'Mod HR', Texturing: 'Tex HR', Lighting: 'Light HR' };
+
+// Typing edits a draft that's saved on Enter or when leaving the cell, so a half-typed number never reaches the stage sheet.
+const HoursCell = ({ value, onSave, disabled, label, reached }) => {
+  const [draft, setDraft] = useState(null);
+  const cancelled = useRef(false);
+  const save = () => {
+    if (!cancelled.current && draft !== null && draft.trim() !== value) onSave(draft.trim());
+    cancelled.current = false;
+    setDraft(null);
+  };
+  return (
+    <input
+      className="cell-input num hours"
+      inputMode="decimal"
+      value={draft ?? value}
+      placeholder="–"
+      disabled={disabled}
+      onFocus={() => setDraft(value)}
+      onChange={(e) => setDraft(e.target.value.replace(/[^0-9.]/g, ''))}
+      onBlur={save}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.currentTarget.blur();
+        if (e.key === 'Escape') { cancelled.current = true; e.currentTarget.blur(); }
+      }}
+      title={reached ? 'Allocated hours in this stage, including any rework hours' : 'Planned hours: the stage row starts with these'}
+      aria-label={label}
+    />
+  );
+};
 
 const managerRowView = (data, project, row) => {
   const stages = Object.fromEntries(STAGES.map((stage) => [stage, stageSnapshot(data, project, stage, row.tcin)]));
@@ -56,6 +87,7 @@ const ManagerView = ({ project, query, filters, onOpenAsset, highlightId }) => {
         <thead>
           <tr className="band">
             <th className="sticky edge" style={{ left: 0 }} colSpan={4}><span className="band-label">Asset</span></th>
+            <th colSpan={3} className="band-hours"><span className="band-label">Allocated hours</span></th>
             <th className="band-shared"><span className="band-label">Shared</span></th>
             {STAGES.map((stage) => (
               <th key={stage} colSpan={3} className={`band-${STAGE_TONE[stage]}`}><span className="band-label">{STAGE_LABEL[stage]}</span></th>
@@ -67,6 +99,7 @@ const ManagerView = ({ project, query, filters, onOpenAsset, highlightId }) => {
             <th className="sticky" style={frozenStyle(1)}>No</th>
             <th className="sticky" style={frozenStyle(2)}>TCIN</th>
             <th className="sticky edge" style={frozenStyle(3)}>Priority</th>
+            {STAGES.map((stage) => <th key={stage} className={`col-alloc tone-${STAGE_TONE[stage]}`}>{HOURS_LABEL[stage]}</th>)}
             <th className="col-comment">Comments</th>
             {STAGES.map((stage) => (
               <React.Fragment key={stage}>
@@ -84,7 +117,7 @@ const ManagerView = ({ project, query, filters, onOpenAsset, highlightId }) => {
         </thead>
         <tbody>
           {rows.length === 0 && (
-            <tr><td colSpan={19} className="no-match">No assets match the current search or filters.</td></tr>
+            <tr><td colSpan={22} className="no-match">No assets match the current search or filters.</td></tr>
           )}
           {rows.map(({ row, view, comment }) => {
             const { position, dispatched } = view;
@@ -126,6 +159,21 @@ const ManagerView = ({ project, query, filters, onOpenAsset, highlightId }) => {
                 <td className="sticky edge" style={frozenStyle(3)}>
                   <PillSelect options={PRIORITIES} value={row.priority} onChange={set(row.id, 'priority')} tone={priorityTone(row.priority)} format={priorityShort} placeholder="Priority" label="Priority" disabled={readOnly} />
                 </td>
+                {STAGES.map((stage) => {
+                  const total = stageAllocated(data, project, stage, row.tcin);
+                  const field = HOURS_FIELD[stage];
+                  return (
+                    <td key={stage} className="col-alloc">
+                      <HoursCell
+                        value={total === null ? row[field] || '' : hoursText(total)}
+                        reached={total !== null}
+                        onSave={set(row.id, field)}
+                        disabled={readOnly || !row.tcin}
+                        label={`${HOURS_LABEL[stage]} for ${row.tcin || 'new asset'}`}
+                      />
+                    </td>
+                  );
+                })}
                 <td className="col-comment">
                   <input
                     className="cell-input"

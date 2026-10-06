@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { STAGES, formatDate, todayISO } from './pipelineModel';
+import { HOURS_FIELD, STAGES, formatDate, hours, hoursText, stageAllocated, todayISO } from './pipelineModel';
 import { withDemoProject } from './mockData';
 import { useAuth } from './auth';
 import { applyRemoteRecord, diffStates, fetchChanges, fetchState, recordKey, recordsToState, seedDatabase, sendMutations } from './sync';
@@ -70,6 +70,30 @@ const replaceRows = (state, stage, project, rows) => ({
   ...state,
   [stage]: { ...state[stage], [project]: rows },
 });
+
+// The Manager sheet's hours for a stage always equal the asset's allocated hours there (first pass plus rework).
+const withManagerHours = (state, project, stage, tcn) => {
+  const total = stageAllocated(state, project, stage, tcn);
+  const field = HOURS_FIELD[stage];
+  const rows = state.Manager[project] || [];
+  if (total === null || !rows.some(r => r.tcin === tcn && r[field] !== hoursText(total))) return state;
+  return { ...state, Manager: { ...state.Manager, [project]: rows.map(r => (r.tcin === tcn ? { ...r, [field]: hoursText(total) } : r)) } };
+};
+
+// Before an asset reaches a stage, the Manager's hours are the plan its first row starts with. Once it's there,
+// editing them changes the stage's latest row so the two stay equal.
+const withStageHours = (state, project, stage, mgrRow, value) => {
+  const field = HOURS_FIELD[stage];
+  const rows = state[stage][project] || [];
+  const mine = rows.filter(r => r.tcn === mgrRow.tcin);
+  if (!mine.length) {
+    return { ...state, Manager: { ...state.Manager, [project]: (state.Manager[project] || []).map(r => (r.id === mgrRow.id ? { ...r, [field]: value } : r)) } };
+  }
+  const latest = mine[mine.length - 1];
+  const earlier = mine.slice(0, -1).reduce((s, r) => s + hours(r.allocTime), 0);
+  const allocTime = String(value).trim() === '' ? '' : hoursText(Math.max(0, hours(value) - earlier));
+  return withManagerHours(replaceRows(state, stage, project, rows.map(r => (r.id === latest.id ? { ...r, allocTime } : r))), project, stage, mgrRow.tcin);
+};
 
 // The names the dropdowns offered before there was a roster.
 const LEGACY_ARTISTS = ['Test', 'Artist A', 'Artist B'];
@@ -335,7 +359,7 @@ export const PipelineProvider = ({ children }) => {
         dueDate: '',
         artist: '',
         status: '',
-        allocTime: '',
+        allocTime: row.modHours || '',
         timeSpent: '',
         reworkTime: ''
       }));
@@ -374,7 +398,7 @@ export const PipelineProvider = ({ children }) => {
   };
 
   // Returns the new row's id, or an error message.
-  const addAsset = (project, { tcin, no, priority, allotDate, comment }) => {
+  const addAsset = (project, { tcin, no, priority, allotDate, comment, modHours = '', texHours = '', lightHours = '' }) => {
     const cleanTcin = String(tcin || '').trim();
     if (!cleanTcin) return { error: 'Enter a TCIN' };
     if (findAsset(project, cleanTcin)) return { error: `${cleanTcin} is already in ${project}` };
@@ -396,6 +420,9 @@ export const PipelineProvider = ({ children }) => {
       modRework: 0,
       textRework: 0,
       lightRework: 0,
+      modHours: String(modHours).trim(),
+      texHours: String(texHours).trim(),
+      lightHours: String(lightHours).trim(),
     };
     commit(prev => {
       const next = { ...prev, Manager: { ...prev.Manager, [project]: [...(prev.Manager[project] || []), newRow] } };
@@ -408,7 +435,10 @@ export const PipelineProvider = ({ children }) => {
     commit(prev => {
       const stageData = prev[stage][project] || [];
       const target = stageData.find(row => row.id === id);
-      const next = replaceRows(prev, stage, project, stageData.map(row => row.id === id ? { ...row, [field]: value } : row));
+      const hoursStage = stage === 'Manager' ? STAGES.find(s => HOURS_FIELD[s] === field) : null;
+      if (hoursStage && target?.tcin) return withStageHours(prev, project, hoursStage, target, value);
+      let next = replaceRows(prev, stage, project, stageData.map(row => row.id === id ? { ...row, [field]: value } : row));
+      if (field === 'allocTime' && target && STAGES.includes(stage)) next = withManagerHours(next, project, stage, target.tcn);
       if (field === 'artist' && value && target && STAGES.includes(stage) && target.artist !== value) {
         return withEvents(next, project, [makeEvent(target.tcn, 'assign', stage, `Assigned to ${value}`, {
           detail: target.allocTime ? `${target.allocTime} h allocated` : '',
@@ -443,7 +473,8 @@ export const PipelineProvider = ({ children }) => {
         let next;
         if (toStage === stage) {
           // Internal rework: archive this row and reopen it for the same artist.
-          const duplicated = { ...carryOver(row), id: generateId(), type: 'rework', comments: comment, artist: row.artist || '' };
+          // Rework starts at 0 hours (the artist's own fix); a manager adds hours when it's a client change.
+          const duplicated = { ...carryOver(row), id: generateId(), type: 'rework', comments: comment, artist: row.artist || '', allocTime: '0' };
           next = replaceRows(prev, stage, project, [...fromRows.map(r => (r.id === id ? { ...r, status: 'Archived Rework' } : r)), duplicated]);
         } else {
           // As in the sheets: this row becomes "Sent to <stage>", and the asset's latest row upstream is archived
@@ -454,7 +485,7 @@ export const PipelineProvider = ({ children }) => {
             if (targetRows[i].tcn === row.tcn) { upstream = i; break; }
           }
           const source = upstream >= 0 ? targetRows[upstream] : row;
-          const duplicated = { ...carryOver(source), id: generateId(), type: 'rework', comments: comment };
+          const duplicated = { ...carryOver(source), id: generateId(), type: 'rework', comments: comment, allocTime: '0' };
           next = replaceRows(prev, stage, project, fromRows.map(r => (r.id === id ? { ...r, status: `Sent to ${toStage}` } : r)));
           next = replaceRows(next, toStage, project, [
             ...targetRows.map((r, i) => (i === upstream ? { ...r, status: 'Archived Rework' } : r)),
@@ -489,7 +520,10 @@ export const PipelineProvider = ({ children }) => {
     const advance = (toStage) => {
       const existsDownstream = (stateRef.current[toStage][project] || []).some(r => r.tcn === row.tcn);
       commit(prev => {
-        const newRow = { ...carryOver(row), id: generateId(), type: existsDownstream ? 'rework' : 'new' };
+        // A first arrival starts with the Manager's hours for the stage; coming back after rework starts at 0.
+        const asset = (prev.Manager[project] || []).find(r => r.tcin === row.tcn);
+        const allocTime = existsDownstream ? '0' : asset?.[HOURS_FIELD[toStage]] || '';
+        const newRow = { ...carryOver(row), id: generateId(), type: existsDownstream ? 'rework' : 'new', allocTime };
         let next = replaceRows(prev, toStage, project, [...(prev[toStage][project] || []), newRow]);
         next = replaceRows(next, stage, project, (prev[stage][project] || []).map(r => r.id === id ? { ...r, status: `Sent to ${toStage}` } : r));
         return withEvents(next, project, [makeEvent(row.tcn, 'advance', toStage, `Sent to ${toStage}`, { detail: timeDetail })]);

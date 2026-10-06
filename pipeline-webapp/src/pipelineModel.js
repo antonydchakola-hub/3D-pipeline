@@ -10,6 +10,8 @@ export const STAGE_LABEL = {
 export const STAGE_TONE = { Modelling: 'mod', Texturing: 'tex', Lighting: 'light' };
 
 export const REWORK_FIELD = { Modelling: 'modRework', Texturing: 'textRework', Lighting: 'lightRework' };
+// The Manager sheet's allocated hours for each stage.
+export const HOURS_FIELD = { Modelling: 'modHours', Texturing: 'texHours', Lighting: 'lightHours' };
 
 export const PRIORITIES = ['High Priority', 'Medium Priority', 'Low Priority'];
 export const COMPLEXITIES = ['Very Simple', 'Simple', 'Medium', 'Hard', 'Very Hard'];
@@ -90,6 +92,15 @@ export const hours = (value) => {
 };
 
 export const formatHours = (n) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
+// Hours written back into a sheet cell: whole numbers stay whole, otherwise up to two decimals.
+export const hoursText = (n) => String(Math.round(n * 100) / 100);
+
+// An asset's allocated hours in a stage: all of its rows there (the first pass plus any rework hours),
+// or null while it hasn't reached that stage.
+export const stageAllocated = (data, project, stage, tcn) => {
+  const rows = (data?.[stage]?.[project] || []).filter((r) => r.tcn === tcn);
+  return rows.length ? rows.reduce((s, r) => s + hours(r.allocTime), 0) : null;
+};
 
 export const priorityShort = (p) => (p ? p.replace(' Priority', '') : '');
 

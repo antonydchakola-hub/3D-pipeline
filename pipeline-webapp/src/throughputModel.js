@@ -121,27 +121,32 @@ const estimateMissingDates = (data, project, passes) => {
   }
 };
 
-// Team members over time. Without a start date, someone counts from the first work they finished; people with
-// neither aren't counted, so a long imported team list doesn't all look like it joined this week.
-const teamTimeline = (data, passes) => {
+const nameKey = (name) => String(name || '').trim().toLowerCase();
+
+// Who is on the team is read from the work itself: someone counts from their start date (or, without one, their
+// first finished work) until their last finished work — or until today while they have work assigned and open.
+// People with no work at all aren't counted, so nobody has to deactivate leavers by hand.
+const activeTeam = (data, finished, open, today) => {
   const first = new Map();
   const last = new Map();
-  for (const p of passes) {
-    if (!p.artist || !p.finishedAt) continue;
+  const note = (map, key, d, pick) => map.set(key, map.has(key) ? pick(map.get(key), d) : d);
+  for (const p of finished) {
+    if (!p.artist) continue;
     const d = dateOf(p.finishedAt);
-    if (!first.has(p.artist) || d < first.get(p.artist)) first.set(p.artist, d);
-    if (!last.has(p.artist) || d > last.get(p.artist)) last.set(p.artist, d);
+    note(first, nameKey(p.artist), d, (a, b) => (b < a ? b : a));
+    note(last, nameKey(p.artist), d, (a, b) => (b > a ? b : a));
   }
+  for (const p of open) if (p.artist) last.set(nameKey(p.artist), today);
   return (data?.artists || [])
-    .filter((m) => (m.role || 'Artist') !== 'Manager')
+    .filter((m) => m.active !== false && (m.role || 'Artist') !== 'Manager' && last.has(nameKey(m.name)))
     .map((m) => {
-      const start = m.startDate || first.get(m.name) || null;
-      const end = m.active === false ? (m.endDate || last.get(m.name) || start) : null;
-      return { name: m.name, stages: m.stages || [], start, end, startKnown: !!m.startDate };
+      const key = nameKey(m.name);
+      const start = m.startDate || first.get(key) || last.get(key);
+      return { name: m.name, stages: m.stages || [], start, end: last.get(key), startKnown: !!m.startDate };
     });
 };
 
-const presentIn = (member, week) => !!member.start && member.start <= addDays(week, 6) && (!member.end || member.end >= week);
+const presentIn = (member, week) => member.start <= addDays(week, 6) && member.end >= week;
 
 // Work is measured in allocated hours, credited in the week a stage finishes its part.
 export const throughputMetrics = (data, projects, { weekCount = 8, today = todayISO() } = {}) => {
@@ -154,9 +159,12 @@ export const throughputMetrics = (data, projects, { weekCount = 8, today = today
   const inPeriod = (ts) => weeks.includes(weekOf(ts));
 
   const allPasses = projects.flatMap((p) => stagePasses(data, p));
-  const passes = allPasses.filter((p) => p.credited && p.finishedAt);
+  const finished = allPasses.filter((p) => p.credited && p.finishedAt);
   const periodStart = new Date(`${weeks[0]}T00:00:00`).toISOString();
-  const team = teamTimeline(data, passes);
+  const team = activeTeam(data, finished, allPasses.filter((p) => p.waiting), today);
+  // Only work by active artists counts, so the hours match the people counted against them.
+  const activeNames = new Set(team.map((m) => nameKey(m.name)));
+  const passes = finished.filter((p) => activeNames.has(nameKey(p.artist)));
   const hoursIn = (list, week) => sum(list.filter((p) => weekOf(p.finishedAt) === week), (p) => p.alloc);
   const half = Math.floor(fullWeeks.length / 2);
 
@@ -190,7 +198,7 @@ export const throughputMetrics = (data, projects, { weekCount = 8, today = today
     const artists = members
       .filter((m) => weeks.some((w) => presentIn(m, w)))
       .map((m) => {
-        const theirs = mine.filter((p) => p.artist === m.name && inPeriod(p.finishedAt));
+        const theirs = mine.filter((p) => nameKey(p.artist) === nameKey(m.name) && inPeriod(p.finishedAt));
         const present = fullWeeks.filter((w) => presentIn(m, w));
         const timed = theirs.filter((p) => p.alloc > 0 && p.spent > 0);
         const daysIn = Math.max(0, daysBetween(m.start, today));

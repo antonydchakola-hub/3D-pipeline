@@ -1,4 +1,4 @@
-import { addDays, formatDate, todayISO, weekStart } from './pipelineModel';
+import { HOURS_FIELD, addDays, formatDate, hours, hoursText, todayISO, weekStart } from './pipelineModel';
 
 export const DEMO_PROJECT = 'Demo';
 
@@ -417,6 +417,15 @@ export const buildDemoProject = (today = todayISO()) => {
       }
     });
   });
+
+  // The Manager sheet's allocated hours match each stage's rows; assets still in the queue get a plan to start from.
+  const PLAN = { Modelling: '8', Texturing: '6', Lighting: '3' };
+  for (const mgr of out.Manager) {
+    for (const stage of ['Modelling', 'Texturing', 'Lighting']) {
+      const rows = out[stage].filter((r) => r.tcn === mgr.tcin);
+      mgr[HOURS_FIELD[stage]] = rows.length ? hoursText(rows.reduce((sum, r) => sum + hours(r.allocTime), 0)) : PLAN[stage];
+    }
+  }
 
   out.assetComments = { ...DEMO_COMMENTS };
 

@@ -20,6 +20,8 @@ const ARTIST_KINDS = new Set(['stage', 'event', 'comment', 'manager']);
 const MANAGER_FIELDS_SET_BY_STAGES = new Set([
   'modRework', 'textRework', 'lightRework', 'modStatus', 'textStatus', 'mainStatus',
   'uploadDate', 'approvedDate', 'modArtist', 'textArtist', 'qaArtist',
+  // Allocated hours edited in a stage sheet are mirrored into the Manager sheet.
+  'modHours', 'texHours', 'lightHours',
 ]);
 
 const json = (body, status = 200) =>

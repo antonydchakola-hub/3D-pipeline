@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { usePipeline } from './PipelineContext';
 import { Icon } from './ui';
-import { PRIORITIES, priorityShort, priorityTone, todayISO } from './pipelineModel';
+import { HOURS_FIELD, PRIORITIES, STAGES, STAGE_TONE, priorityShort, priorityTone, todayISO } from './pipelineModel';
+
+const NO_HOURS = { modHours: '', texHours: '', lightHours: '' };
 
 const AddAssetDialog = ({ project, onClose, onAdded }) => {
   const { addAsset, nextAssetNumber, findAsset } = usePipeline();
@@ -11,6 +13,7 @@ const AddAssetDialog = ({ project, onClose, onAdded }) => {
   const [priority, setPriority] = useState('Medium Priority');
   const [allotDate, setAllotDate] = useState(todayISO());
   const [comment, setComment] = useState('');
+  const [hoursPlan, setHoursPlan] = useState(NO_HOURS);
   const [error, setError] = useState('');
   const [added, setAdded] = useState([]);
   const tcinRef = useRef(null);
@@ -32,7 +35,7 @@ const AddAssetDialog = ({ project, onClose, onAdded }) => {
   const duplicate = tcin.trim() ? findAsset(project, tcin) : null;
 
   const submit = (addAnother) => {
-    const result = addAsset(project, { tcin, no: numberValue, priority, allotDate, comment });
+    const result = addAsset(project, { tcin, no: numberValue, priority, allotDate, comment, ...hoursPlan });
     if (result.error) {
       setError(result.error);
       tcinRef.current?.focus();
@@ -43,6 +46,7 @@ const AddAssetDialog = ({ project, onClose, onAdded }) => {
       setAdded((list) => [...list, tcin.trim()]);
       setTcin('');
       setComment('');
+      setHoursPlan(NO_HOURS);
       setNoTouched(false);
       setError('');
       tcinRef.current?.focus();
@@ -115,6 +119,25 @@ const AddAssetDialog = ({ project, onClose, onAdded }) => {
               <span className="form-label">Allotted date</span>
               <input className="field mono" type="date" value={allotDate} onChange={(e) => setAllotDate(e.target.value)} />
             </label>
+          </div>
+
+          <div className="form-field">
+            <span className="form-label">Allocated hours <span className="optional">optional</span></span>
+            <div className="hours-plan">
+              {STAGES.map((stage) => (
+                <label key={stage} className={`hours-plan-item tone-${STAGE_TONE[stage]}`}>
+                  <span>{stage}</span>
+                  <input
+                    className="field mono"
+                    inputMode="decimal"
+                    placeholder="h"
+                    value={hoursPlan[HOURS_FIELD[stage]]}
+                    onChange={(e) => setHoursPlan((h) => ({ ...h, [HOURS_FIELD[stage]]: e.target.value.replace(/[^0-9.]/g, '') }))}
+                  />
+                </label>
+              ))}
+            </div>
+            <span className="field-hint">Each stage’s row starts with these hours; they can still be changed in that sheet.</span>
           </div>
 
           <label className="form-field">
