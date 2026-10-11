@@ -252,7 +252,6 @@ export const weekStart = (iso) => {
 
 export const consoleMetrics = (data, project, today = todayISO()) => {
   const mgr = rowsFor(data, 'Manager', project);
-  const events = data?.events?.[project] || [];
 
   const open = STAGES.flatMap((stage) => openRows(data, stage, project).map((row) => ({ stage, row })));
   const inFlight = new Set(open.map((o) => o.row.tcn)).size;
@@ -273,21 +272,30 @@ export const consoleMetrics = (data, project, today = todayISO()) => {
     })),
   ];
 
-  const reworkTotals = {
-    Modelling: mgr.reduce((s, r) => s + (r.modRework || 0), 0),
-    Texturing: mgr.reduce((s, r) => s + (r.textRework || 0), 0),
-    Lighting: mgr.reduce((s, r) => s + (r.lightRework || 0), 0),
-  };
-  const reworkSum = reworkTotals.Modelling + reworkTotals.Texturing + reworkTotals.Lighting;
-
-  const thisWeek = weekStart(today);
-  const weeks = Array.from({ length: 6 }, (_, i) => addDays(thisWeek, (i - 5) * 7));
-  const reworkByWeek = Object.fromEntries(STAGES.map((stage) => [stage, weeks.map(() => 0)]));
-  for (const ev of events) {
-    if (ev.kind !== 'rework' || !reworkByWeek[ev.stage]) continue;
-    const idx = weeks.indexOf(weekStart(toISODate(new Date(ev.at))));
-    if (idx >= 0) reworkByWeek[ev.stage][idx] += 1;
+  // Where rework comes from, read from the stage sheets themselves so imported work counts too. A row marked
+  // "Sent to <an earlier stage>" was sent back by its own stage; any other archived rework row in a stage was
+  // that stage's internal fix. reworkFrom[receiving stage][stage that sent it back] lists the TCNs.
+  const reworkFrom = Object.fromEntries(STAGES.map((to) => [to, Object.fromEntries(STAGES.map((from) => [from, []]))]));
+  const crossInto = new Map();
+  for (const from of STAGES) {
+    for (const row of rowsFor(data, from, project)) {
+      if (!isSendBack(from, row.status)) continue;
+      const to = sentTo(row.status);
+      reworkFrom[to][from].push(row.tcn);
+      crossInto.set(`${to}|${row.tcn}`, (crossInto.get(`${to}|${row.tcn}`) || 0) + 1);
+    }
   }
+  for (const stage of STAGES) {
+    const archived = new Map();
+    for (const row of rowsFor(data, stage, project)) {
+      if (row.status === 'Archived Rework') archived.set(row.tcn, (archived.get(row.tcn) || 0) + 1);
+    }
+    for (const [tcn, n] of archived) {
+      for (let i = crossInto.get(`${stage}|${tcn}`) || 0; i < n; i++) reworkFrom[stage][stage].push(tcn);
+    }
+  }
+  const reworkTotals = Object.fromEntries(STAGES.map((to) => [to, STAGES.reduce((s, from) => s + reworkFrom[to][from].length, 0)]));
+  const reworkSum = STAGES.reduce((s, to) => s + reworkTotals[to], 0);
 
   const byArtist = new Map();
   for (const { row } of open) {
@@ -324,8 +332,7 @@ export const consoleMetrics = (data, project, today = todayISO()) => {
     funnel,
     reworkTotals,
     reworkSum,
-    weeks,
-    reworkByWeek,
+    reworkFrom,
     workload,
     due: { days, byDay, late },
   };

@@ -3,8 +3,6 @@ import { usePipeline } from './PipelineContext';
 import { Avatar, Icon } from './ui';
 import { STAGES, STAGE_LABEL, STAGE_TONE, consoleMetrics, formatDate, formatHours, todayISO } from './pipelineModel';
 
-const HEAT = ['#f1f4f9', '#f6e3c6', '#e8b872', '#c98a2e', '#9a5f12'];
-const heatColor = (n) => HEAT[Math.min(n, HEAT.length - 1)];
 
 const ticksFor = (max) => {
   const step = max <= 5 ? 1 : Math.ceil(max / 4);
@@ -48,6 +46,62 @@ const Funnel = ({ funnel }) => {
           </div>
         </div>
       ))}
+    </div>
+  );
+};
+
+// One bar per stage that received rework, split by the stage that sent it back (its own colour for an internal
+// fix). Hovering or focusing a part lists its TCNs.
+const sourceLabel = (to, from) => (to === from ? `${from} (internal fix)` : from);
+
+const ReworkSources = ({ from, totals }) => {
+  const [hover, setHover] = useState(null);
+  const max = Math.max(1, ...STAGES.map((st) => totals[st]));
+  return (
+    <div className="rw">
+      {STAGES.map((to) => {
+        const parts = STAGES.filter((src) => from[to][src].length).map((src) => {
+          const tcns = from[to][src];
+          return { src, tcns };
+        });
+        const shown = hover && hover.to === to ? parts.find((p) => p.src === hover.src) : null;
+        const counts = shown ? [...shown.tcns.reduce((m, t) => m.set(t, (m.get(t) || 0) + 1), new Map())] : [];
+        return (
+          <div key={to} className="rw-row">
+            <span className="rw-label">{STAGE_LABEL[to]}</span>
+            <div className="rw-track">
+              {totals[to] === 0 ? <span className="rw-none">nothing sent back</span> : (
+                <div className="rw-bar" style={{ width: `${(totals[to] / max) * 100}%` }}>
+                  {parts.map((p) => (
+                    <span
+                      key={p.src}
+                      tabIndex={0}
+                      className={`rw-seg tone-${STAGE_TONE[p.src]}${shown?.src === p.src ? ' is-hover' : ''}`}
+                      style={{ flexGrow: p.tcns.length }}
+                      onMouseEnter={(e) => setHover({ to, src: p.src, x: e.currentTarget.offsetLeft + e.currentTarget.offsetWidth / 2 })}
+                      onMouseLeave={() => setHover(null)}
+                      onFocus={(e) => setHover({ to, src: p.src, x: e.currentTarget.offsetLeft + e.currentTarget.offsetWidth / 2 })}
+                      onBlur={() => setHover(null)}
+                      aria-label={`${p.tcns.length} sent back to ${to} by ${sourceLabel(to, p.src)}: ${p.tcns.join(', ')}`}
+                    >
+                      {p.tcns.length / totals[to] >= 0.12 && <span className="rw-seg-num num">{p.tcns.length}</span>}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <span className="rw-count num">{totals[to] || ''}</span>
+            </div>
+            {shown && (
+              <div className="tooltip rw-tip" style={{ left: hover.x }}>
+                <span className="tooltip-title">{shown.tcns.length} sent back to {to} by {sourceLabel(to, shown.src)}</span>
+                <span className="rw-tcns num">
+                  {counts.map(([tcn, n]) => <span key={tcn}>{tcn}{n > 1 ? ` ×${n}` : ''}</span>)}
+                </span>
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 };
@@ -146,10 +200,9 @@ const ConsoleView = ({ project }) => {
       </div>
 
       <div className="console-row">
-        <section className="panel span-2">
+        <section className="panel">
           <header className="panel-head">
-            <h2>Where work is sitting — and what comes back</h2>
-            <Legend items={[{ tone: 'queue', label: 'queue' }, ...STAGES.map((s) => ({ tone: STAGE_TONE[s], label: s }))]} />
+            <h2>Where work is sitting</h2>
           </header>
           <Funnel funnel={m.funnel} />
           <p className="panel-foot">
@@ -157,30 +210,15 @@ const ConsoleView = ({ project }) => {
           </p>
         </section>
 
-        <section className="panel">
-          <header className="panel-head"><h2>Rework pressure</h2></header>
-          <div className="heat">
-            <div className="heat-row heat-head">
-              <span />
-              {m.weeks.map((w) => <span key={w} className="num">{formatDate(w)}</span>)}
-            </div>
-            {STAGES.map((st) => (
-              <div key={st} className="heat-row">
-                <span className="heat-label">{st}</span>
-                {m.reworkByWeek[st].map((n, i) => (
-                  <span key={m.weeks[i]} className="heat-cell" style={{ background: heatColor(n) }} title={`${n} sent back to ${st} in the week of ${formatDate(m.weeks[i])}`} />
-                ))}
-              </div>
-            ))}
-            <div className="heat-scale">
-              <span className="num">0</span>
-              {HEAT.map((c) => <span key={c} className="heat-swatch" style={{ background: c }} />)}
-              <span className="num">4+ sent back</span>
-            </div>
-          </div>
+        <section className="panel span-2">
+          <header className="panel-head">
+            <h2>Rework pressure — who sends work back</h2>
+            <Legend items={STAGES.map((st) => ({ tone: STAGE_TONE[st], label: `sent back by ${st}` }))} />
+          </header>
+          <ReworkSources from={m.reworkFrom} totals={m.reworkTotals} />
           <p className="panel-foot">
             {m.reworkSum
-              ? <>{reworkLeader} absorbs <strong>{Math.round((m.reworkTotals[reworkLeader] / m.reworkSum) * 100)}%</strong> of all rework ({m.reworkSum} send-backs in total).</>
+              ? <>{reworkLeader} absorbs <strong>{Math.round((m.reworkTotals[reworkLeader] / m.reworkSum) * 100)}%</strong> of all rework ({m.reworkSum} send-backs in total). Hover a colour to see its TCNs.</>
               : 'No rework recorded yet.'}
           </p>
         </section>
