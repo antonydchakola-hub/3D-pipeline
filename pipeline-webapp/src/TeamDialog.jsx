@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { usePipeline } from './PipelineContext';
 import { Avatar, Icon } from './ui';
+import Dropdown from './Dropdown';
 import { ROLES, STAGES, STAGE_TONE, artistUsage, matchesQuery, todayISO } from './pipelineModel';
 
 const StageToggles = ({ value, onChange, label }) => (
@@ -73,9 +74,10 @@ const MemberRow = ({ member }) => {
         title="First day on the team — Throughput uses it to count headcount and spot new artists"
         aria-label={`Start date of ${member.name}`}
       />
-      <select className="field member-role" value={member.role || 'Artist'} onChange={(e) => updateArtist(member.id, { role: e.target.value })} aria-label={`Role of ${member.name}`}>
-        {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
-      </select>
+      <Dropdown value={member.role || 'Artist'} options={ROLES} onChange={(r) => updateArtist(member.id, { role: r })} label={`Role of ${member.name}`} className="field select-trigger member-role" minWidth={140}>
+        <span className="select-trigger-text">{member.role || 'Artist'}</span>
+        <Icon name="chevronDown" size={12} stroke={2} />
+      </Dropdown>
       <div className="member-actions">
         <button type="button" className="btn btn-ghost btn-small" onClick={() => updateArtist(member.id, { active: inactive })}>
           {inactive ? 'Reactivate' : 'Deactivate'}
@@ -155,9 +157,10 @@ const TeamDialog = ({ onClose, defaultStage }) => {
           <StageToggles value={stages} onChange={(s) => { setStages(s); setError(''); }} label="Stages for the new artist" />
           <input className="field member-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Login email (optional)" aria-label="Login email for the new artist" />
           <input className="field member-start" type="date" value={startDate} max={todayISO()} onChange={(e) => setStartDate(e.target.value)} title="First day on the team" aria-label="Start date for the new artist" />
-          <select className="field member-role" value={role} onChange={(e) => setRole(e.target.value)} aria-label="Role for the new artist">
-            {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
-          </select>
+          <Dropdown value={role} options={ROLES} onChange={setRole} label="Role for the new artist" className="field select-trigger member-role" minWidth={140}>
+            <span className="select-trigger-text">{role}</span>
+            <Icon name="chevronDown" size={12} stroke={2} />
+          </Dropdown>
           <button type="submit" className="btn btn-brand btn-small"><Icon name="plus" size={14} stroke={2.2} />Add artist</button>
           {error && <span className="field-error add-error">{error}</span>}
         </form>

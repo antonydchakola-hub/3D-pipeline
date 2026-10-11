@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { usePipeline } from './PipelineContext';
 import { Avatar, Icon, Pill } from './ui';
+import Dropdown from './Dropdown';
 import {
   REWORK_FIELD, SEND_BACK_OPTIONS, STAGES, STAGE_LABEL, STAGE_TONE,
   assetStage, daysBetween, displayStatus, formatDate, formatHours, formatTimestamp, hours,
@@ -186,12 +187,19 @@ const AssetRecord = ({ project, tcn, onBack }) => {
               <div className="spacer" />
               {sendBackOptions.length > 0 && (
                 <>
-                  <label className="select-inline">
+                  <span className="select-inline">
                     <span>Send back to</span>
-                    <select value={target || sendBackOptions[0].status} onChange={(e) => setTarget(e.target.value)}>
-                      {sendBackOptions.map((o) => <option key={o.status} value={o.status}>{o.label}</option>)}
-                    </select>
-                  </label>
+                    <Dropdown
+                      value={target || sendBackOptions[0].status}
+                      onChange={setTarget}
+                      label="Send back to"
+                      className="field select-trigger"
+                      options={sendBackOptions.map((o) => ({ value: o.status, label: o.label }))}
+                    >
+                      <span className="select-trigger-text">{sendBackOptions.find((o) => o.status === (target || sendBackOptions[0].status))?.label}</span>
+                      <Icon name="chevronDown" size={12} stroke={2} />
+                    </Dropdown>
+                  </span>
                   <button type="button" className="btn btn-rework" onClick={sendBack} disabled={!draft.trim()}>
                     <Icon name="rework" size={14} stroke={2} />Send back
                   </button>

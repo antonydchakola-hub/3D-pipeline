@@ -74,17 +74,3 @@ export const ArtistCell = ({ name }) =>
     <Dash />
   );
 
-export const PillSelect = ({ options, value, onChange, tone = 'neutral', placeholder = 'Set', format = (v) => v, disabled, label }) => {
-  const opts = value && !options.includes(value) ? [...options, value] : options;
-  return (
-    <label className={`pill-select tone-${value ? tone : 'empty'}${disabled ? ' is-disabled' : ''}`}>
-      <select value={value || ''} onChange={(e) => onChange(e.target.value)} disabled={disabled} aria-label={label}>
-        <option value="">{placeholder}</option>
-        {opts.map((o) => (
-          <option key={o} value={o}>{format(o)}</option>
-        ))}
-      </select>
-      <Icon name="chevronDown" size={12} stroke={2} />
-    </label>
-  );
-};

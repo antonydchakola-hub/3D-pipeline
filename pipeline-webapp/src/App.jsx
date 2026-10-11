@@ -17,6 +17,7 @@ import { AuthGate, AuthProvider, useAuth } from './auth';
 import StageStrip from './StageStrip';
 import { PipelineProvider, usePipeline } from './PipelineContext';
 import { Icon } from './ui';
+import Dropdown from './Dropdown';
 import { DEMO_PROJECT } from './mockData';
 import {
   PIPELINE_CLIENT, PRIORITIES, STAGES, STAGE_LABEL, addDays, formatDate, priorityShort, rowsFor, stageHealth, todayISO, weekStart,
@@ -65,19 +66,23 @@ const TopBar = ({ projects, project, onProject, onAddProject, onResetDemo, onMan
 );
 
 const FilterSelect = ({ label, value, options, format = (v) => v, onChange }) => (
-  <label className={`filter${value ? ' is-set' : ''}`}>
-    {!value && <Icon name="filter" size={13} />}
-    <span className="filter-label">{label}{value ? ':' : ''}</span>
-    <select value={value} onChange={(e) => onChange(e.target.value)} aria-label={label}>
-      <option value="">Any</option>
-      {options.map((o) => <option key={o} value={o}>{format(o)}</option>)}
-    </select>
-    {value ? (
+  <span className={`filter-wrap${value ? ' is-set' : ''}`}>
+    <Dropdown
+      value={value}
+      onChange={onChange}
+      label={label}
+      className="filter"
+      options={[{ value: '', label: 'Any', muted: true }, ...options.map((o) => ({ value: o, label: format(o) }))]}
+    >
+      {!value && <Icon name="filter" size={13} />}
+      <span className="filter-label">{label}{value ? ':' : ''}</span>
+      {value && <span className="filter-value">{format(value)}</span>}
+      {!value && <Icon name="chevronDown" size={12} />}
+    </Dropdown>
+    {value && (
       <button type="button" className="filter-clear" onClick={() => onChange('')} aria-label={`Clear ${label} filter`}><Icon name="close" size={12} stroke={2.2} /></button>
-    ) : (
-      <Icon name="chevronDown" size={12} />
     )}
-  </label>
+  </span>
 );
 
 const MainApp = () => {
@@ -270,15 +275,20 @@ const MainApp = () => {
                     </button>
                   ))}
                 </div>
-                <label className={`filter${flowChoice !== ALL_PROJECTS ? ' is-set' : ''}`}>
-                  <Icon name="filter" size={13} />
-                  <span className="filter-label">Projects:</span>
-                  <select value={flowChoice} onChange={(e) => setFlowScope(e.target.value)} aria-label="Projects">
-                    <option value={ALL_PROJECTS}>{realProjects.length ? 'All except Demo' : 'All'}</option>
-                    {projects.map((p) => <option key={p} value={p}>{p}</option>)}
-                  </select>
-                  <Icon name="chevronDown" size={12} />
-                </label>
+                <span className={`filter-wrap${flowChoice !== ALL_PROJECTS ? ' is-set' : ''}`}>
+                  <Dropdown
+                    value={flowChoice}
+                    onChange={setFlowScope}
+                    label="Projects"
+                    className="filter"
+                    options={[{ value: ALL_PROJECTS, label: realProjects.length ? 'All except Demo' : 'All' }, ...projects]}
+                  >
+                    <Icon name="filter" size={13} />
+                    <span className="filter-label">Projects:</span>
+                    <span className="filter-value">{flowChoice === ALL_PROJECTS ? (realProjects.length ? 'All except Demo' : 'All') : flowChoice}</span>
+                    <Icon name="chevronDown" size={12} />
+                  </Dropdown>
+                </span>
                 {flowChoice !== ALL_PROJECTS && <span className="commandbar-note">Output counts only {flowChoice}; headcount is the whole team.</span>}
               </>
             )}

@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { usePipeline } from './PipelineContext';
 import { useAuth } from './auth';
-import { ArtistCell, Dash, Icon, Pill, PillSelect } from './ui';
+import { ArtistCell, Dash, Icon, Pill } from './ui';
+import Dropdown, { PillSelect } from './Dropdown';
 import {
   HOURS_FIELD, MAIN_STATUSES, PRIORITIES, REWORK_FIELD, STAGES, STAGE_LABEL, STAGE_TONE,
   assetComment, assetStage, displayStatus, formatDate, isDispatched, isOverdue, matchesQuery,
-  hoursText, priorityShort, priorityTone, rowsFor, stageAllocated, stageSnapshot, statusTone, todayISO,
+  dotTone, hoursText, priorityShort, priorityTone, rowsFor, stageAllocated, stageSnapshot, statusTone, todayISO,
 } from './pipelineModel';
 
 const FROZEN = [
@@ -16,6 +17,7 @@ const FROZEN = [
 ];
 const frozenStyle = (i) => ({ left: FROZEN[i].left, width: FROZEN[i].width, minWidth: FROZEN[i].width });
 
+const MAIN_STATUS_TONE = { Uploaded: 'light', Approved: 'good', Rework: 'rework' };
 const HOURS_LABEL = { Modelling: 'Mod HR', Texturing: 'Tex HR', Lighting: 'Light HR' };
 
 // Typing edits a draft that's saved on Enter or when leaving the cell, so a half-typed number never reaches the stage sheet.
@@ -157,7 +159,7 @@ const ManagerView = ({ project, query, filters, onOpenAsset, highlightId }) => {
                   )}
                 </td>
                 <td className="sticky edge" style={frozenStyle(3)}>
-                  <PillSelect options={PRIORITIES} value={row.priority} onChange={set(row.id, 'priority')} tone={priorityTone(row.priority)} format={priorityShort} placeholder="Priority" label="Priority" disabled={readOnly} />
+                  <PillSelect options={PRIORITIES} value={row.priority} onChange={set(row.id, 'priority')} tone={priorityTone(row.priority)} optionTone={(p) => dotTone(priorityTone(p))} format={priorityShort} placeholder="Priority" label="Priority" disabled={readOnly} />
                 </td>
                 {STAGES.map((stage) => {
                   const total = stageAllocated(data, project, stage, row.tcin);
@@ -222,15 +224,22 @@ const ManagerView = ({ project, query, filters, onOpenAsset, highlightId }) => {
                       {position.label}
                     </span>
                   ) : (
-                  <label className={`status-pill tone-${position.tone}`} title={row.mainStatus ? `Main status: ${row.mainStatus}` : 'Follows the stage sheets — click to set the main status'}>
+                  <Dropdown
+                    value={row.mainStatus || ''}
+                    onChange={set(row.id, 'mainStatus')}
+                    label={`Status of ${row.tcin || 'new asset'}: ${position.label}. Set main status`}
+                    title={row.mainStatus ? `Main status: ${row.mainStatus}` : 'Follows the stage sheets — click to set the main status'}
+                    className={`status-pill tone-${position.tone}`}
+                    minWidth={220}
+                    options={[
+                      { value: '', label: 'Automatic (follow the stages)', muted: true },
+                      ...MAIN_STATUSES.map((s) => ({ value: s, label: s, tone: MAIN_STATUS_TONE[s] })),
+                    ]}
+                  >
                     <span className="pill-dot" />
                     {position.label}
                     <Icon name="chevronDown" size={12} stroke={2} />
-                    <select value={row.mainStatus || ''} onChange={(e) => set(row.id, 'mainStatus')(e.target.value)} aria-label={`Status of ${row.tcin || 'new asset'}: ${position.label}. Set main status`}>
-                      <option value="">Automatic (follow the stages)</option>
-                      {MAIN_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                  </label>
+                  </Dropdown>
                   )}
                 </td>
                 <td className="col-date">

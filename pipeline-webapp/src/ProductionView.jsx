@@ -1,10 +1,11 @@
 import React from 'react';
 import { usePipeline } from './PipelineContext';
-import { Avatar, Icon, Pill, PillSelect } from './ui';
+import { Avatar, Icon, Pill } from './ui';
+import { PillSelect } from './Dropdown';
 import {
   COMPLEXITIES, PRIORITIES, STAGE_TONE, STATUS_OPTIONS, TYPES, artistOptions as rosterOptions,
   assetComment, displayStatus, formatHours, isSendBack, hours, isArchived, isLocked, isOverdue, matchesQuery,
-  priorityShort, priorityTone, rowsFor, statusTone, todayISO, typeTone,
+  dotTone, priorityShort, priorityTone, rowsFor, statusTone, todayISO, typeTone,
 } from './pipelineModel';
 
 const FROZEN = [
@@ -106,8 +107,8 @@ const ProductionView = ({ stageName, project, query, filters, onOpenAsset }) => 
                     aria-label="Comments"
                   />
                 </td>
-                <td><PillSelect options={TYPES} value={row.type} onChange={set(row.id, 'type')} tone={typeTone(row.type)} disabled={locked} placeholder="Type" label="Type" /></td>
-                <td><PillSelect options={PRIORITIES} value={row.priority} onChange={set(row.id, 'priority')} tone={priorityTone(row.priority)} format={priorityShort} disabled={locked} placeholder="Priority" label="Priority" /></td>
+                <td><PillSelect options={TYPES} value={row.type} onChange={set(row.id, 'type')} tone={typeTone(row.type)} optionTone={typeTone} disabled={locked} placeholder="Type" label="Type" /></td>
+                <td><PillSelect options={PRIORITIES} value={row.priority} onChange={set(row.id, 'priority')} tone={priorityTone(row.priority)} optionTone={(p) => dotTone(priorityTone(p))} format={priorityShort} disabled={locked} placeholder="Priority" label="Priority" /></td>
                 <td><PillSelect options={COMPLEXITIES} value={row.complexity} onChange={set(row.id, 'complexity')} tone="neutral" disabled={locked} placeholder="Complexity" label="Complexity" /></td>
                 <td className="col-date"><input type="date" className="cell-input date" value={row.allotDate || ''} disabled={locked} onChange={(e) => set(row.id, 'allotDate')(e.target.value)} aria-label="Allotment date" /></td>
                 <td className="col-date">
@@ -132,7 +133,7 @@ const ProductionView = ({ stageName, project, query, filters, onOpenAsset }) => 
                       {isArchived(row) || isSendBack(stageName, row.status) ? row.status : displayStatus(row.status, stageName)}
                     </Pill>
                   ) : (
-                    <PillSelect options={STATUS_OPTIONS[stageName]} value={row.status} onChange={(v) => handleStatusChange(stageName, project, row.id, v)} tone={statusTone(row.status)} placeholder="In progress" label="Status" />
+                    <PillSelect options={STATUS_OPTIONS[stageName]} value={row.status} onChange={(v) => handleStatusChange(stageName, project, row.id, v)} tone={statusTone(row.status)} optionTone={(st) => dotTone(statusTone(st, stageName))} placeholder="In progress" label="Status" />
                   )}
                 </td>
                 <td className="col-num"><input className="cell-input num" value={row.allocTime || ''} disabled={locked} onChange={(e) => set(row.id, 'allocTime')(e.target.value)} aria-label="Allocated time" inputMode="decimal" /></td>

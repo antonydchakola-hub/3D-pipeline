@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Avatar, Icon, Pill } from './ui';
+import Dropdown from './Dropdown';
 import { ROLE_LABEL, useAuth } from './auth';
 import { api } from './sync';
 import { matchesQuery } from './pipelineModel';
@@ -85,14 +86,17 @@ const AccountRow = ({ account, isSelf, onChanged, onRemoved, notify }) => {
           {!account.active && <Pill tone="neutral">Turned off</Pill>}
           {account.locked && <Pill tone="danger" icon="lock">Locked</Pill>}
         </div>
-        <select
-          className="field account-role"
+        <Dropdown
           value={account.role}
-          onChange={(e) => patch({ role: e.target.value }, `${account.username} is now ${ROLE_LABEL[e.target.value]}`).catch(() => {})}
-          aria-label={`Role of ${account.username}`}
+          options={ROLES.map((r) => ({ value: r, label: ROLE_LABEL[r] }))}
+          onChange={(r) => patch({ role: r }, `${account.username} is now ${ROLE_LABEL[r]}`).catch(() => {})}
+          label={`Role of ${account.username}`}
+          className="field select-trigger account-role"
+          minWidth={140}
         >
-          {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
-        </select>
+          <span className="select-trigger-text">{ROLE_LABEL[account.role]}</span>
+          <Icon name="chevronDown" size={12} stroke={2} />
+        </Dropdown>
         <div className="account-actions">
           {account.locked && (
             <button type="button" className="btn btn-ghost btn-small" onClick={() => patch({ unlock: true }, `${account.username} unlocked`).catch(() => {})}>Unlock</button>
@@ -192,9 +196,18 @@ const AccountsDialog = ({ onClose, notify }) => {
         <form className="add-account" onSubmit={create} autoComplete="off">
           <input ref={firstRef} className="field mono" placeholder="Username" value={form.username} onChange={set('username')} aria-label="Username" autoCapitalize="none" spellCheck={false} />
           <input className="field" placeholder="Full name" value={form.displayName} onChange={set('displayName')} aria-label="Full name" />
-          <select className="field" value={form.role} onChange={set('role')} aria-label="Role" title={ROLE_HELP[form.role]}>
-            {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
-          </select>
+          <Dropdown
+            value={form.role}
+            options={ROLES.map((r) => ({ value: r, label: ROLE_LABEL[r] }))}
+            onChange={(r) => { setForm((f) => ({ ...f, role: r })); setFormError(''); }}
+            label="Role"
+            title={ROLE_HELP[form.role]}
+            className="field select-trigger"
+            minWidth={140}
+          >
+            <span className="select-trigger-text">{ROLE_LABEL[form.role]}</span>
+            <Icon name="chevronDown" size={12} stroke={2} />
+          </Dropdown>
           <input className="field" type="password" autoComplete="new-password" placeholder="Password" value={form.password} onChange={set('password')} aria-label="Password" />
           <input className="field" type="password" autoComplete="new-password" placeholder="Type it again" value={form.again} onChange={set('again')} aria-label="Type the password again" />
           <button type="submit" className="btn btn-brand btn-small" disabled={saving}><Icon name="plus" size={14} stroke={2.2} />Add account</button>

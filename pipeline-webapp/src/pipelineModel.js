@@ -163,6 +163,8 @@ export const priorityTone = (p) => {
   if (p === 'Medium Priority') return 'amber';
   return p ? 'neutral' : 'empty';
 };
+// The colour of a value's dot in a dropdown list (solid tones are fills, so use their plain colour).
+export const dotTone = (tone) => String(tone || '').replace('-solid', '');
 export const typeTone = (t) => (t === 'rework' ? 'rework' : t === 'new' ? 'brand' : 'empty');
 
 export const isOverdue = (row, today = todayISO()) =>
