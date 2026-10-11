@@ -1,4 +1,6 @@
-import { STAGES, addDays, daysBetween, hours, isCreditedRow, isOpen, rowsFor, toISODate, todayISO, weekStart } from './pipelineModel';
+import {
+  STAGES, addDays, daysBetween, hours, isCreditedRow, isOpen, isSendBack, rowsFor, sentTo, toISODate, todayISO, weekStart,
+} from './pipelineModel';
 
 // Artists who joined within this many weeks count as new.
 export const NEW_ARTIST_WEEKS = 8;
@@ -58,6 +60,7 @@ export const stagePasses = (data, project) => {
       const pass = {
         project,
         stage,
+        id: row.id,
         tcn: row.tcn,
         artist: row.artist || '',
         alloc: hours(row.allocTime),
@@ -66,6 +69,7 @@ export const stagePasses = (data, project) => {
         finishedAt: timeline.get(row.tcn)?.[stage]?.[index]?.finishedAt,
         credited: isCreditedRow(row),
         waiting: isOpen(row) && row.status !== 'Uploaded',
+        status: row.status,
         sentBack: row.status === 'Archived Rework',
       };
       if (!byTcn.has(row.tcn)) byTcn.set(row.tcn, []);
@@ -256,4 +260,67 @@ export const throughputMetrics = (data, projects, { weekCount = 8, today = today
     })(),
     missingStarts: team.filter((m) => !m.startKnown && m.start).map((m) => m.name),
   };
+};
+
+// Every send-back in a project with the week it happened, for the Console's rework chart. Send-backs made in the
+// app take their time from the history; ones imported from the sheets take the estimated finish of the row that
+// was sent back. Each item: the stage the work went back to, the stage that sent it, the TCN, and the time.
+export const reworkTimeline = (data, project, { weekCount = 8, today = todayISO() } = {}) => {
+  const passes = stagePasses(data, project);
+  const events = (data?.events?.[project] || []).filter((ev) => ev.kind === 'rework');
+  const withEvents = new Set(events.map((ev) => ev.tcn));
+  const items = [];
+  const crossInto = new Map();
+  for (const p of passes) {
+    if (!isSendBack(p.stage, p.status)) continue;
+    const to = sentTo(p.status);
+    items.push({ to, from: p.stage, tcn: p.tcn, at: p.finishedAt, estimated: !!p.estimated });
+    crossInto.set(`${to}|${p.tcn}`, (crossInto.get(`${to}|${p.tcn}`) || 0) + 1);
+  }
+  // Internal fixes: the history records them directly; for imported rows, any archived rework row in a stage that
+  // a send-back into that stage doesn't explain.
+  for (const ev of events) {
+    if (ev.from === ev.stage && STAGES.includes(ev.stage)) items.push({ to: ev.stage, from: ev.stage, tcn: ev.tcn, at: ev.at, estimated: false });
+  }
+  for (const stage of STAGES) {
+    const archived = new Map();
+    for (const p of passes) {
+      if (p.stage === stage && p.sentBack && !withEvents.has(p.tcn)) {
+        if (!archived.has(p.tcn)) archived.set(p.tcn, []);
+        archived.get(p.tcn).push(p);
+      }
+    }
+    for (const [tcn, list] of archived) {
+      for (const p of list.slice(crossInto.get(`${stage}|${tcn}`) || 0)) {
+        items.push({ to: stage, from: stage, tcn, at: p.finishedAt, estimated: !!p.estimated });
+      }
+    }
+  }
+
+  const thisWeek = weekStart(today);
+  const weeks = Array.from({ length: weekCount }, (_, i) => addDays(thisWeek, (i - weekCount + 1) * 7));
+  const columns = weeks.map((week) => ({ week, current: week === thisWeek, byStage: Object.fromEntries(STAGES.map((s) => [s, []])) }));
+  let inPeriod = 0;
+  let estimated = 0;
+  for (const item of items) {
+    if (!item.at) continue;
+    const col = columns[weeks.indexOf(weekStart(toISODate(new Date(item.at))))];
+    if (!col) continue;
+    col.byStage[item.to].push(item);
+    inPeriod += 1;
+    if (item.estimated) estimated += 1;
+  }
+  return { columns, inPeriod, estimated, total: items.length };
+};
+
+// The month (YYYY-MM) each finished stage row was marked done: from the history for work done in the app, estimated
+// from the asset's dates for rows imported from the sheets. Keyed by row id.
+export const finishMonths = (data, projects) => {
+  const months = new Map();
+  for (const project of projects) {
+    for (const p of stagePasses(data, project)) {
+      if (p.credited && p.finishedAt) months.set(p.id, { month: dateOf(p.finishedAt).slice(0, 7), estimated: !!p.estimated });
+    }
+  }
+  return months;
 };

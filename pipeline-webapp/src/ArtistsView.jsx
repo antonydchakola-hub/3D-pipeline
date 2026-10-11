@@ -30,7 +30,7 @@ const SortTh = ({ id, sort, onSort, className = '', style, children }) => (
   </th>
 );
 
-const ArtistsView = ({ stage, projects, week, query, onOpenAsset }) => {
+const ArtistsView = ({ stage, projects, week, query, onOpenAsset, countRow }) => {
   const { data, setArtistLog } = usePipeline();
   // The weekly entries (direct uploads, QA, leave…) are typed in by managers.
   const readOnly = !useAuth().canManage;
@@ -38,7 +38,7 @@ const ArtistsView = ({ stage, projects, week, query, onOpenAsset }) => {
   const [expanded, setExpanded] = useState(null);
 
   const log = data.artistLog?.[week] || {};
-  const summary = artistSummary(data, projects, stage);
+  const summary = artistSummary(data, projects, stage, { countRow });
   const rows = summary.filter((a) => matchesQuery(query, a.artist)).sort(SORTS[sort]);
 
   const totals = rows.reduce((t, a) => ({

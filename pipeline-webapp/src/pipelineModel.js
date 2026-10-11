@@ -41,7 +41,7 @@ export const SEND_BACK_OPTIONS = {
 const ARCHIVED = new Set(['Archived Rework', 'Archived Split']);
 const STAGE_ORDER = { Modelling: 0, Texturing: 1, Lighting: 2 };
 
-const sentTo = (status) => (String(status || '').startsWith('Sent to ') ? String(status).slice(8) : null);
+export const sentTo = (status) => (String(status || '').startsWith('Sent to ') ? String(status).slice(8) : null);
 // "Sent to Modelling" on a Texturing or Lighting row means it was sent back, as in the sheets.
 export const isSendBack = (stage, status) => {
   const target = sentTo(status);
@@ -378,15 +378,16 @@ const blankArtist = (artist) => ({
 
 // Same rules as the Artist sheet: models and complexity count only "new" rows; completed hours add the
 // allocated time, time spent adds time spent plus rework time, and rework adds rework time.
-export const artistSummary = (data, projects, stage) => {
+// `countRow`, when given, limits the credited work to the rows it accepts (e.g. those finished in one month).
+export const artistSummary = (data, projects, stage, { countRow } = {}) => {
   const byArtist = new Map();
   for (const project of projects) {
     for (const row of rowsFor(data, stage, project)) {
       if (!row.artist) continue;
       if (!byArtist.has(row.artist)) byArtist.set(row.artist, blankArtist(row.artist));
       const a = byArtist.get(row.artist);
-      const credited = isCreditedRow(row);
-      a.rows.push({ project, row, credited });
+      const credited = isCreditedRow(row) && (!countRow || countRow(row));
+      if (credited || isOpen(row) || !countRow) a.rows.push({ project, row, credited });
       if (credited) {
         a.completedHours += hours(row.allocTime);
         a.timeSpent += hours(row.timeSpent) + hours(row.reworkTime);

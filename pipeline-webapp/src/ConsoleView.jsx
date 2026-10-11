@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { usePipeline } from './PipelineContext';
 import { Avatar, Icon } from './ui';
 import { STAGES, STAGE_LABEL, STAGE_TONE, consoleMetrics, formatDate, formatHours, todayISO } from './pipelineModel';
+import { reworkTimeline } from './throughputModel';
 
 
 const ticksFor = (max) => {
@@ -50,58 +51,66 @@ const Funnel = ({ funnel }) => {
   );
 };
 
-// One bar per stage that received rework, split by the stage that sent it back (its own colour for an internal
-// fix). Hovering or focusing a part lists its TCNs.
-const sourceLabel = (to, from) => (to === from ? `${from} (internal fix)` : from);
-
-const ReworkSources = ({ from, totals }) => {
+// One column per week; its colours are the stages the work went back to. Hovering or focusing a week lists the
+// TCNs in each stage and who sent them back.
+const ReworkWeeks = ({ timeline }) => {
   const [hover, setHover] = useState(null);
-  const max = Math.max(1, ...STAGES.map((st) => totals[st]));
+  const { columns } = timeline;
+  const totals = columns.map((c) => STAGES.reduce((n, st) => n + c.byStage[st].length, 0));
+  const { top, ticks } = ticksFor(Math.max(1, ...totals));
+  const H = 168;
+
+  if (!totals.some(Boolean)) {
+    return <div className="panel-empty">Nothing was sent back in the last {columns.length} weeks.</div>;
+  }
+
+  const h = hover !== null ? columns[hover] : null;
+  const byWho = (items) => items.map((it) => `${it.tcn} (${it.from === it.to ? 'internal' : `from ${it.from}`})`).join(', ');
   return (
-    <div className="rw">
-      {STAGES.map((to) => {
-        const parts = STAGES.filter((src) => from[to][src].length).map((src) => {
-          const tcns = from[to][src];
-          return { src, tcns };
-        });
-        const shown = hover && hover.to === to ? parts.find((p) => p.src === hover.src) : null;
-        const counts = shown ? [...shown.tcns.reduce((m, t) => m.set(t, (m.get(t) || 0) + 1), new Map())] : [];
-        return (
-          <div key={to} className="rw-row">
-            <span className="rw-label">{STAGE_LABEL[to]}</span>
-            <div className="rw-track">
-              {totals[to] === 0 ? <span className="rw-none">nothing sent back</span> : (
-                <div className="rw-bar" style={{ width: `${(totals[to] / max) * 100}%` }}>
-                  {parts.map((p) => (
-                    <span
-                      key={p.src}
-                      tabIndex={0}
-                      className={`rw-seg tone-${STAGE_TONE[p.src]}${shown?.src === p.src ? ' is-hover' : ''}`}
-                      style={{ flexGrow: p.tcns.length }}
-                      onMouseEnter={(e) => setHover({ to, src: p.src, x: e.currentTarget.offsetLeft + e.currentTarget.offsetWidth / 2 })}
-                      onMouseLeave={() => setHover(null)}
-                      onFocus={(e) => setHover({ to, src: p.src, x: e.currentTarget.offsetLeft + e.currentTarget.offsetWidth / 2 })}
-                      onBlur={() => setHover(null)}
-                      aria-label={`${p.tcns.length} sent back to ${to} by ${sourceLabel(to, p.src)}: ${p.tcns.join(', ')}`}
-                    >
-                      {p.tcns.length / totals[to] >= 0.12 && <span className="rw-seg-num num">{p.tcns.length}</span>}
-                    </span>
-                  ))}
-                </div>
-              )}
-              <span className="rw-count num">{totals[to] || ''}</span>
-            </div>
-            {shown && (
-              <div className="tooltip rw-tip" style={{ left: hover.x }}>
-                <span className="tooltip-title">{shown.tcns.length} sent back to {to} by {sourceLabel(to, shown.src)}</span>
-                <span className="rw-tcns num">
-                  {counts.map(([tcn, n]) => <span key={tcn}>{tcn}{n > 1 ? ` ×${n}` : ''}</span>)}
-                </span>
+    <div className="due-chart">
+      <div className="due-axis">
+        {ticks.map((t) => (
+          <span key={t} className="num" style={{ bottom: 26 + (t / top) * H - 6 }}>{t}</span>
+        ))}
+      </div>
+      <div className="due-plot" style={{ height: H + 26 }}>
+        {ticks.map((t) => (
+          <span key={t} className={`due-grid${t === 0 ? ' is-base' : ''}`} style={{ bottom: 26 + (t / top) * H }} />
+        ))}
+        <div className="due-cols" style={{ height: H + 26 }}>
+          {columns.map((c, i) => (
+            <div
+              key={c.week}
+              className={`due-col${c.current ? ' is-partial' : ''}${hover === i ? ' is-hover' : ''}`}
+              onMouseEnter={() => setHover(i)}
+              onMouseLeave={() => setHover(null)}
+              onFocus={() => setHover(i)}
+              onBlur={() => setHover(null)}
+              tabIndex={totals[i] ? 0 : -1}
+              aria-label={`Week of ${formatDate(c.week)}: ${totals[i]} sent back`}
+            >
+              <div className="due-stack" style={{ height: H }}>
+                {STAGES.map((st) => c.byStage[st].length > 0 && (
+                  <span key={st} className={`due-seg tone-${STAGE_TONE[st]}`} style={{ height: (c.byStage[st].length / top) * H }} />
+                ))}
               </div>
-            )}
+              <span className="due-label num">{c.current ? 'This wk' : formatDate(c.week)}</span>
+            </div>
+          ))}
+        </div>
+        {h && totals[hover] > 0 && (
+          <div className={`tooltip rw-tip${hover < 2 ? ' is-start' : hover >= columns.length - 2 ? ' is-end' : ''}`} style={{ left: `${((hover + 0.5) / columns.length) * 100}%` }}>
+            <span className="tooltip-title num">{h.current ? 'This week so far' : `Week of ${formatDate(h.week)}`} · {totals[hover]} sent back</span>
+            {STAGES.map((st) => h.byStage[st].length > 0 && (
+              <span key={st} className="tooltip-row">
+                <span className={`legend-swatch tone-${STAGE_TONE[st]}`} />
+                <span className="tooltip-label">{STAGE_LABEL[st]} · {h.byStage[st].length}</span>
+                <span className="num tooltip-tcns">{byWho(h.byStage[st])}</span>
+              </span>
+            ))}
           </div>
-        );
-      })}
+        )}
+      </div>
     </div>
   );
 };
@@ -174,6 +183,7 @@ const ConsoleView = ({ project }) => {
   const { data } = usePipeline();
   const today = todayISO();
   const m = consoleMetrics(data, project, today);
+  const rework = reworkTimeline(data, project, { weekCount: 8, today });
 
   const reworkLeader = STAGES.reduce((a, b) => (m.reworkTotals[b] > m.reworkTotals[a] ? b : a), 'Modelling');
   const workloadScale = Math.max(1, ...m.workload.map((w) => Math.max(w.alloc, w.spent)));
@@ -212,13 +222,13 @@ const ConsoleView = ({ project }) => {
 
         <section className="panel span-2">
           <header className="panel-head">
-            <h2>Rework pressure — who sends work back</h2>
-            <Legend items={STAGES.map((st) => ({ tone: STAGE_TONE[st], label: `sent back by ${st}` }))} />
+            <h2>Rework pressure · last 8 weeks</h2>
+            <Legend items={STAGES.map((st) => ({ tone: STAGE_TONE[st], label: `back to ${st}` }))} />
           </header>
-          <ReworkSources from={m.reworkFrom} totals={m.reworkTotals} />
+          <ReworkWeeks timeline={rework} />
           <p className="panel-foot">
             {m.reworkSum
-              ? <>{reworkLeader} absorbs <strong>{Math.round((m.reworkTotals[reworkLeader] / m.reworkSum) * 100)}%</strong> of all rework ({m.reworkSum} send-backs in total). Hover a colour to see its TCNs.</>
+              ? <>{reworkLeader} absorbs <strong>{Math.round((m.reworkTotals[reworkLeader] / m.reworkSum) * 100)}%</strong> of all rework ({m.reworkSum} send-backs in total). Hover a week to see its TCNs{rework.estimated ? `; ${rework.estimated} of the ${rework.inPeriod} shown have estimated weeks, from the sheets` : ''}.</>
               : 'No rework recorded yet.'}
           </p>
         </section>

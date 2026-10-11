@@ -5,6 +5,7 @@ import ConsoleView from './ConsoleView';
 import AssetRecord from './AssetRecord';
 import ArtistsView from './ArtistsView';
 import ThroughputView from './ThroughputView';
+import { finishMonths } from './throughputModel';
 import HomePage from './HomePage';
 import { ClientSetupPage, ToolPage } from './ToolPages';
 import ProfileMenu from './ProfileMenu';
@@ -22,6 +23,15 @@ import {
 } from './pipelineModel';
 
 const ALL_PROJECTS = '__all__';
+const ALL_TIME = 'all';
+
+// Months as YYYY-MM.
+const shiftMonth = (month, by) => {
+  const d = new Date(`${month}-01T00:00:00`);
+  d.setMonth(d.getMonth() + by);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+};
+const monthLabel = (month) => new Date(`${month}-01T00:00:00`).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
 
 const TopBar = ({ projects, project, onProject, onAddProject, onResetDemo, onManageTeam, onManageAccounts, canManage, query, onQuery }) => (
   <header className="topbar">
@@ -82,6 +92,7 @@ const MainApp = () => {
   const [filters, setFilters] = useState({ priority: '', artist: '' });
   const [artistStage, setArtistStage] = useState('Modelling');
   const [artistScope, setArtistScope] = useState(ALL_PROJECTS);
+  const [artistMonth, setArtistMonth] = useState(() => todayISO().slice(0, 7));
   const [flowScope, setFlowScope] = useState(null);
   const [flowWeeks, setFlowWeeks] = useState(8);
   const [week, setWeek] = useState(() => weekStart(todayISO()));
@@ -128,6 +139,16 @@ const MainApp = () => {
 
   const thisWeek = weekStart(todayISO());
   const artistProjects = artistScope === ALL_PROJECTS ? projects : [artistScope].filter((p) => projects.includes(p));
+  // Artists counts each finished job in the month it was marked done.
+  const thisMonth = todayISO().slice(0, 7);
+  const finished = mode === 'artists' && artistMonth !== ALL_TIME ? finishMonths(data, artistProjects) : null;
+  const countRow = finished ? (row) => finished.get(row.id)?.month === artistMonth : undefined;
+  const estimatedInMonth = finished
+    ? artistProjects.reduce((n, p) => n + rowsFor(data, artistStage, p).filter((r) => {
+      const f = finished.get(r.id);
+      return f?.month === artistMonth && f.estimated;
+    }).length, 0)
+    : 0;
   // Throughput looks at the whole team, so by default it covers every real project; the Demo only when you're in it.
   const realProjects = projects.filter((p) => p !== DEMO_PROJECT);
   const flowDefault = activeProject === DEMO_PROJECT || !realProjects.length ? DEMO_PROJECT : ALL_PROJECTS;
@@ -157,7 +178,7 @@ const MainApp = () => {
   } else if (mode === 'throughput') {
     content = <ThroughputView data={data} projects={flowProjects} weekCount={flowWeeks} onOpenTeam={canManage ? () => setTeamOpen(true) : undefined} />;
   } else if (mode === 'artists') {
-    content = <ArtistsView stage={artistStage} projects={artistProjects} week={week} query={query} onOpenAsset={openAsset} />;
+    content = <ArtistsView stage={artistStage} projects={artistProjects} week={week} query={query} onOpenAsset={openAsset} countRow={countRow} />;
   } else if (stage === 'Manager') {
     content = <ManagerView project={activeProject} query={query} filters={filters} onOpenAsset={openAsset} highlightId={highlightId} />;
   } else {
@@ -210,6 +231,16 @@ const MainApp = () => {
                     <span className="divider" />
                   </>
                 )}
+                <div className="week-nav" aria-label="Month the work was marked done">
+                  <button type="button" className="icon-btn" onClick={() => setArtistMonth((m) => shiftMonth(m === ALL_TIME ? thisMonth : m, -1))} aria-label="Previous month"><Icon name="chevronLeft" size={15} stroke={2} /></button>
+                  <span className="week-label">
+                    <span className="eyebrow">Done in</span>
+                    <span className="num">{artistMonth === ALL_TIME ? 'All time' : monthLabel(artistMonth)}</span>
+                  </span>
+                  <button type="button" className="icon-btn" onClick={() => setArtistMonth((m) => shiftMonth(m === ALL_TIME ? thisMonth : m, 1))} disabled={artistMonth !== ALL_TIME && artistMonth >= thisMonth} aria-label="Next month"><Icon name="chevronRight" size={15} stroke={2} /></button>
+                  <button type="button" className="btn btn-ghost btn-small" onClick={() => setArtistMonth((m) => (m === ALL_TIME ? thisMonth : ALL_TIME))}>{artistMonth === ALL_TIME ? 'By month' : 'All time'}</button>
+                </div>
+                <span className="divider" />
                 <div className="week-nav" aria-label="Week for leaves, training and QA hours">
                   <button type="button" className="icon-btn" onClick={() => setWeek((w) => addDays(w, -7))} aria-label="Previous week"><Icon name="chevronLeft" size={15} stroke={2} /></button>
                   <span className="week-label">
@@ -291,7 +322,8 @@ const MainApp = () => {
 
       {!asset && mode === 'artists' && (
         <footer className="statusbar">
-          <span>{STAGE_LABEL[artistStage]} · running totals across {artistScope === ALL_PROJECTS ? `all ${projects.length} projects` : artistScope}</span>
+          <span>{STAGE_LABEL[artistStage]} · {artistMonth === ALL_TIME ? 'running totals' : `work marked done in ${monthLabel(artistMonth)}`} across {artistScope === ALL_PROJECTS ? `all ${projects.length} projects` : artistScope}</span>
+          {estimatedInMonth > 0 && <span>{estimatedInMonth} of these came from the sheets, so their month is estimated</span>}
           <span>Leaves, training and QA hours are for the week of {formatDate(week)}</span>
           <div className="spacer" />
           <SyncIndicator />
